@@ -1,12 +1,12 @@
-// Función serverless con Express básico - Paso incremental
-console.log("🚀 Iniciando función con Express básico");
+// Test: Express con respuestas de texto plano
+console.log("🚀 Iniciando Express con texto plano");
 
 module.exports = async (req, res) => {
   console.log("📥 Request recibido:", req.method, req.url);
   
   try {
-    // Headers básicos
-    res.setHeader('Content-Type', 'application/json');
+    // Headers para texto plano
+    res.setHeader('Content-Type', 'text/plain');
     res.setHeader('Access-Control-Allow-Origin', '*');
     
     // Manejar OPTIONS
@@ -16,67 +16,53 @@ module.exports = async (req, res) => {
       return;
     }
     
-    console.log("🏗️ Creando Express app básica...");
-    
-    // Importar Express SIN module aliases
+    console.log("🏗️ Importando Express...");
     const express = require("express");
-    const app = express();
-    
     console.log("✅ Express importado");
     
-    // Solo middleware esencial
-    app.use(express.json({ limit: '1mb' }));
+    console.log("🔧 Creando app Express...");
+    const app = express();
+    console.log("✅ App Express creada");
     
+    // Middleware básico
+    console.log("🔧 Configurando middleware...");
+    app.use(express.text());
     console.log("✅ Middleware configurado");
     
-    // Rutas ultra-simples con JSON mínimo
+    // Rutas con texto plano
     app.get('/debug', (req, res) => {
-      console.log("🔍 Procesando /debug");
-      
-      const simpleResponse = {
-        success: true,
-        message: "Express funciona",
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log("📤 Enviando JSON simple");
-      res.status(200).json(simpleResponse);
+      console.log("🔍 Procesando /debug con Express");
+      res.status(200).send(`DEBUG con Express:
+- Status: OK
+- Express funciona: SI
+- Timestamp: ${new Date().toISOString()}
+- Method: ${req.method}
+- URL: ${req.url}`);
     });
     
     app.get('/health', (req, res) => {
-      console.log("💚 Procesando /health");
-      res.status(200).json({ 
-        status: "OK", 
-        time: new Date().toISOString() 
-      });
+      console.log("💚 Procesando /health con Express");
+      res.status(200).send(`HEALTH con Express: OK - ${new Date().toISOString()}`);
     });
     
     app.get('/', (req, res) => {
-      console.log("🏠 Procesando raíz");
-      res.status(200).json({ 
-        message: "Express básico funciona",
-        version: "express-test"
-      });
+      console.log("🏠 Procesando raíz con Express");
+      res.status(200).send(`EXPRESS FUNCIONA - ${new Date().toISOString()}\nEndpoints: /debug, /health`);
     });
     
-    // Catch all simple
     app.use('*', (req, res) => {
-      res.status(404).json({ 
-        error: "Not found",
-        path: req.url 
-      });
+      console.log("❓ Ruta no encontrada con Express");
+      res.status(404).send(`NOT FOUND: ${req.method} ${req.url}`);
     });
     
-    console.log("✅ Rutas configuradas, delegando request...");
+    console.log("✅ Rutas Express configuradas");
+    console.log("🚀 Delegando request a Express...");
     
-    // Delegar el request a Express
+    // Delegar a Express
     return app(req, res);
     
   } catch (error) {
     console.error("💥 Error:", error);
-    
-    // Respuesta de emergencia como texto plano
-    res.setHeader('Content-Type', 'text/plain');
     res.status(500).send('ERROR: ' + error.message);
   }
 }; 
