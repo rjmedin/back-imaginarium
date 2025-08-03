@@ -1,13 +1,9 @@
 {
   "version": 2,
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api-docs(.*)",
-      "dest": "/api/app.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/app.js"
+      "source": "/(.*)",
+      "destination": "/api"
     }
   ],
   "env": {
@@ -15,7 +11,7 @@
     "ENABLE_SWAGGER": "true"
   },
   "functions": {
-    "api/app.js": {
+    "api/index.js": {
       "runtime": "@vercel/node@3.2.0"
     }
   }

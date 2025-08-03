@@ -1,4 +1,4 @@
-﻿const { createApp } = require("../dist/app");
+const { createApp } = require("../dist/app");
 const { DatabaseConnection } = require("../dist/infrastructure/database/connection");
 const { validateConfig } = require("../dist/shared/config/config");
 const logger = require("../dist/shared/utils/logger");
@@ -88,4 +88,4 @@ module.exports = async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
-};
+}; 
