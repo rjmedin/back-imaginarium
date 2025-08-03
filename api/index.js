@@ -1,122 +1,176 @@
-// Test: JSON responses graduales con Express
-console.log("🚀 Iniciando Express con JSON gradual");
+// Solución definitiva: JSON manual como string - EVITA res.json()
+console.log("🚀 Iniciando solución JSON manual");
+
+// Función helper para crear JSON manualmente
+function createJSONResponse(data) {
+  try {
+    return JSON.stringify(data);
+  } catch (error) {
+    return '{"error":"JSON stringify failed","message":"' + error.message + '"}';
+  }
+}
 
 module.exports = async (req, res) => {
-  console.log("📥 Request recibido:", req.method, req.url);
+  console.log("📥 Request:", req.method, req.url);
   
   try {
-    // Manejar OPTIONS primero
+    // Headers seguros
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // OPTIONS
     if (req.method === 'OPTIONS') {
-      console.log("✅ OPTIONS request");
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      console.log("✅ OPTIONS");
       res.status(200).end();
       return;
     }
     
-    console.log("🏗️ Importando Express...");
+    console.log("🏗️ Creando Express...");
     const express = require("express");
     const app = express();
-    console.log("✅ Express importado y app creada");
     
-    // Middleware mínimo
+    // Middleware CORS
     app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       next();
     });
     
-    // Test 1: JSON ultra-simple
-    app.get('/test1', (req, res) => {
-      console.log("🧪 Test 1: JSON ultra-simple");
-      res.json({ test: 1 });
-    });
-    
-    // Test 2: JSON con string
-    app.get('/test2', (req, res) => {
-      console.log("🧪 Test 2: JSON con string");
-      res.json({ message: "hello" });
-    });
-    
-    // Test 3: JSON con timestamp
-    app.get('/test3', (req, res) => {
-      console.log("🧪 Test 3: JSON con timestamp");
-      res.json({ 
+    // RUTA DEBUG - JSON manual
+    app.get('/debug', (req, res) => {
+      console.log("🔍 Debug - JSON manual");
+      
+      const debugData = {
         success: true,
-        time: new Date().toISOString()
-      });
-    });
-    
-    // Test 4: JSON más complejo (como el que falló antes)
-    app.get('/test4', (req, res) => {
-      console.log("🧪 Test 4: JSON complejo");
-      res.json({
-        success: true,
-        message: 'Debug endpoint funcionando',
+        message: "Debug endpoint funcionando",
+        method: "manual_json_string",
         environment: {
-          NODE_ENV: process.env.NODE_ENV,
-          ENABLE_SWAGGER: process.env.ENABLE_SWAGGER
+          NODE_ENV: process.env.NODE_ENV || 'undefined',
+          ENABLE_SWAGGER: process.env.ENABLE_SWAGGER || 'undefined',
+          MONGODB_URI: process.env.MONGODB_URI ? "Configurado" : "No configurado",
+          JWT_SECRET: process.env.JWT_SECRET ? "Configurado" : "No configurado"
+        },
+        paths: {
+          __dirname: __dirname,
+          cwd: process.cwd()
         },
         timestamp: new Date().toISOString()
-      });
-    });
-    
-    // Test 5: Enviar JSON manualmente
-    app.get('/test5', (req, res) => {
-      console.log("🧪 Test 5: JSON manual");
-      res.setHeader('Content-Type', 'application/json');
-      res.status(200).send('{"manual": true, "test": 5}');
-    });
-    
-    // Debug principal con diferentes métodos
-    app.get('/debug', (req, res) => {
-      console.log("🔍 Debug principal");
+      };
       
-      // Método directo sin res.json()
-      res.setHeader('Content-Type', 'application/json');
-      const response = JSON.stringify({
-        success: true,
-        method: "manual_stringify",
-        express_works: true,
-        timestamp: new Date().toISOString()
-      });
+      const jsonString = createJSONResponse(debugData);
       
-      console.log("📤 Enviando JSON con stringify manual");
-      res.status(200).send(response);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).send(jsonString);
+      console.log("✅ Debug JSON enviado manualmente");
     });
     
-    // Health check (sabemos que texto funciona)
+    // RUTA HEALTH - JSON simple
     app.get('/health', (req, res) => {
-      console.log("💚 Health check (texto)");
-      res.setHeader('Content-Type', 'text/plain');
-      res.status(200).send('EXPRESS + JSON TEST - OK');
+      console.log("💚 Health - JSON manual");
+      
+      const healthData = {
+        success: true,
+        message: "API funcionando - JSON manual",
+        status: "OK",
+        timestamp: new Date().toISOString(),
+        version: "1.0.0-manual-json"
+      };
+      
+      const jsonString = createJSONResponse(healthData);
+      
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).send(jsonString);
+      console.log("✅ Health JSON enviado manualmente");
     });
     
-    // Página principal con links
+    // RUTA API-DOCS - JSON simple
+    app.get('/api-docs', (req, res) => {
+      console.log("📚 API-docs - JSON manual");
+      
+      const docsData = {
+        success: true,
+        message: "Swagger temporalmente deshabilitado",
+        note: "Usando JSON manual para evitar problemas de res.json()",
+        availableEndpoints: ["/health", "/debug", "/api/users"]
+      };
+      
+      const jsonString = createJSONResponse(docsData);
+      
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).send(jsonString);
+      console.log("✅ API-docs JSON enviado manualmente");
+    });
+    
+    // RUTA API/USERS - JSON simple
+    app.get('/api/users', (req, res) => {
+      console.log("👥 Users - JSON manual");
+      
+      const usersData = {
+        success: true,
+        message: "Endpoint users funcionando",
+        note: "Base de datos temporalmente deshabilitada para testing",
+        data: [],
+        timestamp: new Date().toISOString()
+      };
+      
+      const jsonString = createJSONResponse(usersData);
+      
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).send(jsonString);
+      console.log("✅ Users JSON enviado manualmente");
+    });
+    
+    // RUTA RAÍZ - JSON simple
     app.get('/', (req, res) => {
-      console.log("🏠 Página principal");
-      res.setHeader('Content-Type', 'text/plain');
-      res.status(200).send(`EXPRESS JSON TESTS
-Endpoints para probar:
-- /test1 (JSON ultra-simple)
-- /test2 (JSON con string)  
-- /test3 (JSON con timestamp)
-- /test4 (JSON complejo)
-- /test5 (JSON manual)
-- /debug (JSON con stringify)
-- /health (texto de control)
-
-Prueba cada uno para ver cuál falla.`);
+      console.log("🏠 Raíz - JSON manual");
+      
+      const homeData = {
+        success: true,
+        message: "Imaginarium API - Funcionando con JSON manual",
+        version: "1.0.0-manual-json",
+        note: "Esta versión evita res.json() y usa JSON.stringify() manual",
+        endpoints: {
+          health: "/health",
+          debug: "/debug",
+          docs: "/api-docs",
+          users: "/api/users"
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      const jsonString = createJSONResponse(homeData);
+      
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(200).send(jsonString);
+      console.log("✅ Home JSON enviado manualmente");
     });
     
-    console.log("✅ Todas las rutas configuradas");
-    console.log("🚀 Delegando a Express...");
+    // CATCH ALL
+    app.use('*', (req, res) => {
+      console.log("❓ No encontrado:", req.url);
+      
+      const notFoundData = {
+        success: false,
+        message: "Endpoint no encontrado",
+        path: req.url,
+        method: req.method,
+        availableEndpoints: ["/", "/health", "/debug", "/api-docs", "/api/users"]
+      };
+      
+      const jsonString = createJSONResponse(notFoundData);
+      
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.status(404).send(jsonString);
+    });
     
+    console.log("✅ Express configurado, delegando...");
     return app(req, res);
     
   } catch (error) {
-    console.error("💥 Error:", error);
+    console.error("💥 Error crítico:", error);
+    
+    // Respuesta de emergencia como texto plano
     res.setHeader('Content-Type', 'text/plain');
-    res.status(500).send('ERROR: ' + error.message);
+    res.status(500).send('ERROR CRITICO: ' + error.message);
   }
 }; 
