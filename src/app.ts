@@ -24,7 +24,7 @@ export const createApp = (): express.Application => {
   app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
       ? [
-          process.env.FRONTEND_URL || 'https://tu-dominio.vercel.app',
+          process.env.FRONTEND_URL || 'https://back-imaginarium.vercel.app',
           'https://app.n8n.cloud',
           process.env.N8N_URL || 'http://localhost:5678'
         ]

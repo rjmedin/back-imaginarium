@@ -1,10 +1,10 @@
-﻿import { createApp } from "../dist/app";
-import { DatabaseConnection } from "../dist/infrastructure/database/connection";
-import { validateConfig } from "../dist/shared/config/config";
-import logger from "../dist/shared/utils/logger";
+﻿const { createApp } = require("../dist/app");
+const { DatabaseConnection } = require("../dist/infrastructure/database/connection");
+const { validateConfig } = require("../dist/shared/config/config");
+const logger = require("../dist/shared/utils/logger");
 
 // Configurar module alias para Vercel
-import * as moduleAlias from "module-alias";
+const moduleAlias = require("module-alias");
 moduleAlias.addAliases({
   "@domain": __dirname + "/../dist/domain",
   "@application": __dirname + "/../dist/application", 
@@ -13,7 +13,7 @@ moduleAlias.addAliases({
   "@shared": __dirname + "/../dist/shared"
 });
 
-let cachedApp: any = null;
+let cachedApp = null;
 let isConnected = false;
 
 const initializeApp = async () => {
@@ -48,7 +48,7 @@ const initializeApp = async () => {
 };
 
 // Handler para Vercel (Serverless Function)
-export default async (req: any, res: any) => {
+module.exports = async (req, res) => {
   console.log(`🔥 Request recibido: ${req.method} ${req.url}`);
   
   try {
@@ -66,7 +66,7 @@ export default async (req: any, res: any) => {
     const app = await initializeApp();
     console.log("🚀 App inicializada, procesando request...");
     return app(req, res);
-  } catch (error: any) {
+  } catch (error) {
     console.error("💥 Error en handler de Vercel:", error);
     
     // Si es un error de módulo no encontrado, probablemente el build falló
@@ -84,7 +84,7 @@ export default async (req: any, res: any) => {
     return res.status(500).json({
       success: false,
       message: "Error interno del servidor",
-      error: process.env.NODE_ENV === "development" ? error?.message : "Error de servidor",
+      error: process.env.NODE_ENV === "development" ? error.message : "Error de servidor",
       timestamp: new Date().toISOString()
     });
   }
