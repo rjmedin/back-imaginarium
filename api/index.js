@@ -1,193 +1,156 @@
-// Versión completamente básica - SIN module aliases ni módulos externos
-console.log("🔥 INICIANDO VERSION BASICA - SIN MODULE ALIASES");
-
-// Variables básicas del entorno
-const envInfo = {
-  NODE_ENV: process.env.NODE_ENV || 'undefined',
-  ENABLE_SWAGGER: process.env.ENABLE_SWAGGER || 'undefined',
-  MONGODB_URI: process.env.MONGODB_URI ? 'Configurado' : 'No configurado',
-  JWT_SECRET: process.env.JWT_SECRET ? 'Configurado' : 'No configurado',
-  dirname: __dirname,
-  cwd: process.cwd(),
-  nodeVersion: process.version,
-  platform: process.platform,
-  arch: process.arch,
-  timestamp: new Date().toISOString()
-};
-
-console.log("📊 Info del entorno:", JSON.stringify(envInfo, null, 2));
-
-// Función ultra-básica que solo usa Express nativo
-function createUltraBasicApp() {
-  console.log("🏗️ Creando app ultra-básica...");
-  
-  try {
-    const express = require("express");
-    console.log("✅ Express importado exitosamente");
-    
-    const app = express();
-    console.log("✅ App Express creada");
-    
-    // Middleware ultra-básico
-    app.use((req, res, next) => {
-      console.log(`📨 Request: ${req.method} ${req.url}`);
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      next();
-    });
-    
-    // Ruta debug ultra-básica
-    app.get('/debug', (req, res) => {
-      console.log("🔍 Procesando ruta /debug");
-      
-      try {
-        const response = {
-          success: true,
-          message: "Debug endpoint - versión ultra-básica",
-          info: "Esta versión NO usa module aliases ni módulos compilados",
-          environment: envInfo,
-          test: "Si ves esto, la configuración básica de Vercel funciona"
-        };
-        
-        console.log("📤 Enviando respuesta debug");
-        res.status(200).json(response);
-        console.log("✅ Respuesta debug enviada");
-        
-      } catch (error) {
-        console.error("❌ Error en ruta debug:", error);
-        res.status(500).send('{"success":false,"message":"Error procesando debug"}');
-      }
-    });
-    
-    // Ruta health ultra-básica
-    app.get('/health', (req, res) => {
-      console.log("💚 Procesando ruta /health");
-      
-      try {
-        res.status(200).json({
-          success: true,
-          message: "Health check - versión ultra-básica",
-          status: "OK",
-          version: "1.0.0-ultra-basic",
-          timestamp: new Date().toISOString()
-        });
-        console.log("✅ Respuesta health enviada");
-        
-      } catch (error) {
-        console.error("❌ Error en health:", error);
-        res.status(200).send('{"success":true,"message":"Health OK"}');
-      }
-    });
-    
-    // Ruta raíz
-    app.get('/', (req, res) => {
-      console.log("🏠 Procesando ruta raíz");
-      
-      try {
-        res.status(200).json({
-          success: true,
-          message: "Imaginarium API - Versión Ultra-Básica",
-          note: "Esta versión usa solo Express básico para diagnosticar problemas",
-          version: "1.0.0-ultra-basic",
-          endpoints: ["/health", "/debug"],
-          timestamp: new Date().toISOString()
-        });
-        console.log("✅ Respuesta raíz enviada");
-        
-      } catch (error) {
-        console.error("❌ Error en raíz:", error);
-        res.status(200).send('{"success":true,"message":"API básica funcionando"}');
-      }
-    });
-    
-    // Catch-all ultra-básico
-    app.use('*', (req, res) => {
-      console.log(`❓ Ruta no encontrada: ${req.method} ${req.url}`);
-      
-      try {
-        res.status(404).json({
-          success: false,
-          message: "Endpoint no encontrado",
-          path: req.url,
-          method: req.method,
-          availableEndpoints: ["/", "/health", "/debug"]
-        });
-      } catch (error) {
-        res.status(404).send('{"success":false,"message":"Not found"}');
-      }
-    });
-    
-    console.log("✅ App ultra-básica configurada completamente");
-    return app;
-    
-  } catch (error) {
-    console.error("💥 ERROR CRÍTICO creando app ultra-básica:", error);
-    return null;
-  }
+// Configurar module alias ANTES de cualquier require
+try {
+  console.log("🔧 Configurando module aliases...");
+  const moduleAlias = require("module-alias");
+  moduleAlias.addAliases({
+    "@domain": __dirname + "/../dist/domain",
+    "@application": __dirname + "/../dist/application", 
+    "@infrastructure": __dirname + "/../dist/infrastructure",
+    "@presentation": __dirname + "/../dist/presentation",
+    "@shared": __dirname + "/../dist/shared"
+  });
+  console.log("✅ Module aliases configurados");
+} catch (error) {
+  console.error("❌ Error configurando module aliases:", error);
 }
 
-// Handler ultra-básico para Vercel
+console.log("📁 __dirname:", __dirname);
+console.log("📁 process.cwd():", process.cwd());
+console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
+console.log("📊 ENABLE_SWAGGER:", process.env.ENABLE_SWAGGER);
+console.log("🔗 MONGODB_URI:", process.env.MONGODB_URI ? "✅ Configurado" : "❌ Faltante");
+console.log("🔐 JWT_SECRET:", process.env.JWT_SECRET ? "✅ Configurado" : "❌ Faltante");
+
+// Función simplificada para probar (la que funcionó antes)
+function createSimpleApp() {
+  const express = require("express");
+  const app = express();
+  
+  console.log("🏗️ Creando app Express básica...");
+  
+  // Middlewares básicos
+  app.use(express.json());
+  
+  // CORS básico
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+  });
+  
+  // Rutas de prueba
+  app.get('/health', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'API funcionando - versión simplificada',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0-debug'
+    });
+  });
+  
+  app.get('/debug', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Debug endpoint funcionando',
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        ENABLE_SWAGGER: process.env.ENABLE_SWAGGER,
+        MONGODB_URI: process.env.MONGODB_URI ? "Configurado" : "Faltante",
+        JWT_SECRET: process.env.JWT_SECRET ? "Configurado" : "Faltante"
+      },
+      paths: {
+        __dirname: __dirname,
+        cwd: process.cwd()
+      },
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  app.get('/api-docs', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Swagger temporalmente deshabilitado para debugging',
+      note: 'Usar /debug para información del sistema'
+    });
+  });
+  
+  app.get('/api/users', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Endpoint users en modo debug',
+      note: 'Base de datos temporalmente deshabilitada para debugging'
+    });
+  });
+  
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Imaginarium API - Modo Debug',
+      version: '1.0.0-debug',
+      endpoints: {
+        health: '/health',
+        debug: '/debug',
+        docs: '/api-docs'
+      }
+    });
+  });
+  
+  // Catch all
+  app.use('*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      message: 'Endpoint no encontrado',
+      path: req.originalUrl,
+      method: req.method
+    });
+  });
+  
+  console.log("✅ App Express básica creada");
+  return app;
+}
+
+// Handler para Vercel (Serverless Function)
 module.exports = async (req, res) => {
-  console.log(`🚀 HANDLER INICIADO: ${req.method} ${req.url}`);
-  console.log(`📡 User-Agent: ${req.headers['user-agent']}`);
-  console.log(`🌐 Host: ${req.headers.host}`);
+  console.log(`🔥 Request recibido: ${req.method} ${req.url}`);
   
   try {
-    // Headers básicos inmediatos
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    // Configurar headers para CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     
-    console.log("✅ Headers configurados");
-    
-    // Manejar OPTIONS inmediatamente
+    // Manejar preflight OPTIONS requests
     if (req.method === 'OPTIONS') {
-      console.log("⚡ Respondiendo OPTIONS inmediatamente");
+      console.log("✅ Respondiendo a preflight OPTIONS");
       res.status(200).end();
       return;
     }
-    
-    console.log("🏗️ Creando app...");
-    const app = createUltraBasicApp();
+
+    console.log("🚀 Creando aplicación simplificada...");
+    const app = createSimpleApp();
     
     if (!app) {
-      console.error("💥 No se pudo crear app, enviando respuesta de emergencia");
-      
-      // Respuesta de emergencia absoluta
-      const emergencyResponse = JSON.stringify({
+      console.error("❌ No se pudo crear la aplicación");
+      return res.status(500).json({
         success: false,
-        message: "Error crítico: No se pudo crear la aplicación básica",
+        message: "Error: No se pudo crear la aplicación simplificada",
         timestamp: new Date().toISOString()
       });
-      
-      res.status(500).send(emergencyResponse);
-      return;
     }
     
-    console.log("✅ App creada, delegando request...");
+    console.log("🚀 App creada, procesando request...");
     return app(req, res);
-    
   } catch (error) {
-    console.error("💥💥 ERROR CRÍTICO EN HANDLER:", error);
-    console.error("Stack:", error.stack);
+    console.error("💥 Error en handler de Vercel:", error);
+    console.error("💥 Stack completo:", error.stack);
     
-    try {
-      // Último recurso
-      const errorResponse = JSON.stringify({
-        success: false,
-        message: "Error crítico en handler",
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-      
-      res.status(500).send(errorResponse);
-      
-    } catch (finalError) {
-      console.error("💥💥💥 ERROR FINAL:", finalError);
-      res.status(500).send('{"success":false,"message":"Error crítico"}');
-    }
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
   }
 }; 
