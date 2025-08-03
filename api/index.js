@@ -16,79 +16,103 @@ try {
 
 console.log("📁 __dirname:", __dirname);
 console.log("📁 process.cwd():", process.cwd());
+console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
+console.log("📊 ENABLE_SWAGGER:", process.env.ENABLE_SWAGGER);
+console.log("🔗 MONGODB_URI:", process.env.MONGODB_URI ? "✅ Configurado" : "❌ Faltante");
+console.log("🔐 JWT_SECRET:", process.env.JWT_SECRET ? "✅ Configurado" : "❌ Faltante");
 
-let createApp, DatabaseConnection, validateConfig, logger;
-
-try {
-  console.log("📦 Importando módulos...");
-  const appModule = require("../dist/app");
-  createApp = appModule.createApp;
-  console.log("✅ app.js importado");
-
-  const dbModule = require("../dist/infrastructure/database/connection");
-  DatabaseConnection = dbModule.DatabaseConnection;
-  console.log("✅ database connection importado");
-
-  const configModule = require("../dist/shared/config/config");
-  validateConfig = configModule.validateConfig;
-  console.log("✅ config importado");
-
-  logger = require("../dist/shared/utils/logger");
-  console.log("✅ logger importado");
-} catch (error) {
-  console.error("❌ Error importando módulos:", error);
-  console.error("Stack:", error.stack);
-}
-
-let cachedApp = null;
-let isConnected = false;
-
-const initializeApp = async () => {
-  console.log("🚀 Inicializando aplicación...");
+// Función simplificada para probar
+function createSimpleApp() {
+  const express = require("express");
+  const app = express();
   
-  if (cachedApp && isConnected) {
-    console.log("♻️ Usando aplicación cacheada");
-    return cachedApp;
-  }
-
-  try {
-    // Validar configuración
-    console.log("🔍 Validando configuración...");
-    if (validateConfig) {
-      validateConfig();
-      console.log("✅ Configuración válida");
-    }
-    
-    // Conectar a la base de datos solo una vez
-    if (!isConnected && DatabaseConnection) {
-      console.log("🔗 Conectando a la base de datos...");
-      const db = DatabaseConnection.getInstance();
-      await db.connect();
-      isConnected = true;
-      console.log("✅ Base de datos conectada");
-    }
-    
-    // Crear aplicación
-    if (!cachedApp && createApp) {
-      console.log("🏗️ Creando aplicación Express...");
-      cachedApp = createApp();
-      console.log("✅ Aplicación inicializada para Vercel.");
-      console.log("📊 ENABLE_SWAGGER:", process.env.ENABLE_SWAGGER);
-      console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
-    }
-    
-    return cachedApp;
-  } catch (error) {
-    console.error("❌ Error inicializando aplicación:", error);
-    console.error("Stack completo:", error.stack);
-    throw error;
-  }
-};
+  console.log("🏗️ Creando app Express básica...");
+  
+  // Middlewares básicos
+  app.use(express.json());
+  
+  // CORS básico
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+  });
+  
+  // Rutas de prueba
+  app.get('/health', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'API funcionando - versión simplificada',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0-debug'
+    });
+  });
+  
+  app.get('/debug', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Debug endpoint funcionando',
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        ENABLE_SWAGGER: process.env.ENABLE_SWAGGER,
+        MONGODB_URI: process.env.MONGODB_URI ? "Configurado" : "Faltante",
+        JWT_SECRET: process.env.JWT_SECRET ? "Configurado" : "Faltante"
+      },
+      paths: {
+        __dirname: __dirname,
+        cwd: process.cwd()
+      },
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  app.get('/api-docs', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Swagger temporalmente deshabilitado para debugging',
+      note: 'Usar /debug para información del sistema'
+    });
+  });
+  
+  app.get('/api/users', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Endpoint users en modo debug',
+      note: 'Base de datos temporalmente deshabilitada para debugging'
+    });
+  });
+  
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Imaginarium API - Modo Debug',
+      version: '1.0.0-debug',
+      endpoints: {
+        health: '/health',
+        debug: '/debug',
+        docs: '/api-docs'
+      }
+    });
+  });
+  
+  // Catch all
+  app.use('*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      message: 'Endpoint no encontrado',
+      path: req.originalUrl,
+      method: req.method
+    });
+  });
+  
+  console.log("✅ App Express básica creada");
+  return app;
+}
 
 // Handler para Vercel (Serverless Function)
 module.exports = async (req, res) => {
   console.log(`🔥 Request recibido: ${req.method} ${req.url}`);
-  console.log("🔄 Headers:", req.headers);
   
   try {
     // Configurar headers para CORS
@@ -103,42 +127,29 @@ module.exports = async (req, res) => {
       return;
     }
 
-    console.log("🔄 Inicializando aplicación...");
-    const app = await initializeApp();
+    console.log("🚀 Creando aplicación simplificada...");
+    const app = createSimpleApp();
     
     if (!app) {
       console.error("❌ No se pudo crear la aplicación");
       return res.status(500).json({
         success: false,
-        message: "Error: No se pudo inicializar la aplicación",
+        message: "Error: No se pudo crear la aplicación simplificada",
         timestamp: new Date().toISOString()
       });
     }
     
-    console.log("🚀 App inicializada, procesando request...");
+    console.log("🚀 App creada, procesando request...");
     return app(req, res);
   } catch (error) {
     console.error("💥 Error en handler de Vercel:", error);
     console.error("💥 Stack completo:", error.stack);
     
-    // Si es un error de módulo no encontrado, probablemente el build falló
-    if (error.code === 'MODULE_NOT_FOUND') {
-      console.error("📦 Error de módulo no encontrado:", error.message);
-      return res.status(500).json({
-        success: false,
-        message: "Error de compilación del servidor",
-        error: "Los archivos TypeScript no han sido compilados correctamente",
-        details: error.message,
-        stack: error.stack,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
     return res.status(500).json({
       success: false,
       message: "Error interno del servidor",
-      error: process.env.NODE_ENV === "development" ? error.message : "Error de servidor",
-      details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      error: error.message,
+      stack: error.stack,
       timestamp: new Date().toISOString()
     });
   }
