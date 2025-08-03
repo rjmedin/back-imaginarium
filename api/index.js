@@ -1,9 +1,4 @@
-const { createApp } = require("../dist/app");
-const { DatabaseConnection } = require("../dist/infrastructure/database/connection");
-const { validateConfig } = require("../dist/shared/config/config");
-const logger = require("../dist/shared/utils/logger");
-
-// Configurar module alias para Vercel
+// Configurar module alias ANTES de cualquier require
 const moduleAlias = require("module-alias");
 moduleAlias.addAliases({
   "@domain": __dirname + "/../dist/domain",
@@ -12,6 +7,11 @@ moduleAlias.addAliases({
   "@presentation": __dirname + "/../dist/presentation",
   "@shared": __dirname + "/../dist/shared"
 });
+
+const { createApp } = require("../dist/app");
+const { DatabaseConnection } = require("../dist/infrastructure/database/connection");
+const { validateConfig } = require("../dist/shared/config/config");
+const logger = require("../dist/shared/utils/logger");
 
 let cachedApp = null;
 let isConnected = false;
