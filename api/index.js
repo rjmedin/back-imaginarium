@@ -1,7 +1,46 @@
-// Imaginarium API - Solución definitiva con JSON como text/plain
-console.log("🚀 Imaginarium API iniciando - JSON como text/plain");
+// Imaginarium API - Fase 1: Agregando Module Aliases gradualmente
+console.log("🚀 Imaginarium API - Fase 1: Module Aliases");
 
-// Función helper para enviar JSON como text/plain
+// PASO 1: Configurar module aliases (manteniendo compatibilidad)
+let moduleAliasConfigured = false;
+try {
+  console.log("🔧 Configurando module aliases...");
+  const moduleAlias = require("module-alias");
+  moduleAlias.addAliases({
+    "@domain": __dirname + "/../dist/domain",
+    "@application": __dirname + "/../dist/application", 
+    "@infrastructure": __dirname + "/../dist/infrastructure",
+    "@presentation": __dirname + "/../dist/presentation",
+    "@shared": __dirname + "/../dist/shared"
+  });
+  moduleAliasConfigured = true;
+  console.log("✅ Module aliases configurados exitosamente");
+} catch (error) {
+  console.error("❌ Error configurando module aliases:", error.message);
+}
+
+// PASO 2: Intentar cargar módulos compilados gradualmente
+let compiledModules = {
+  config: null,
+  logger: null,
+  database: null,
+  app: null
+};
+
+// Intentar cargar config compilado
+if (moduleAliasConfigured) {
+  try {
+    console.log("📦 Intentando cargar config compilado...");
+    const configModule = require("../dist/shared/config/config");
+    compiledModules.config = configModule;
+    console.log("✅ Config compilado cargado exitosamente");
+  } catch (error) {
+    console.error("⚠️ No se pudo cargar config compilado:", error.message);
+    console.log("📝 Usando configuración manual como fallback");
+  }
+}
+
+// Función helper para enviar JSON como text/plain (mantener funcionando)
 function sendJSON(res, data, statusCode = 200) {
   try {
     const jsonString = JSON.stringify(data, null, 2);
@@ -12,6 +51,25 @@ function sendJSON(res, data, statusCode = 200) {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.status(500).send(`{"error":"JSON stringify failed","message":"${error.message}"}`);
     return false;
+  }
+}
+
+// Función para obtener configuración (compilada o fallback)
+function getConfig() {
+  if (compiledModules.config) {
+    console.log("📋 Usando config compilado");
+    return compiledModules.config.config;
+  } else {
+    console.log("📋 Usando config manual fallback");
+    return {
+      port: parseInt(process.env.PORT || '3000'),
+      nodeEnv: process.env.NODE_ENV || 'development',
+      mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/imaginarium_db',
+      jwtSecret: process.env.JWT_SECRET || 'imaginarium_secret_key_2024',
+      jwtExpiresIn: process.env.JWT_EXPIRES_IN || '24h',
+      rateLimitWindowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'),
+      rateLimitMaxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100')
+    };
   }
 }
 
@@ -35,6 +93,9 @@ module.exports = async (req, res) => {
     const express = require("express");
     const app = express();
     
+    // Obtener configuración (compilada o fallback)
+    const config = getConfig();
+    
     // Middleware básico
     app.use(express.json());
     app.use((req, res, next) => {
@@ -42,7 +103,7 @@ module.exports = async (req, res) => {
       next();
     });
     
-    // HEALTH CHECK
+    // HEALTH CHECK (mejorado con config)
     app.get('/health', (req, res) => {
       console.log("💚 Health check");
       
@@ -51,11 +112,13 @@ module.exports = async (req, res) => {
         message: "API funcionando correctamente. Todo va bien.",
         timestamp: new Date().toISOString(),
         version: "1.0.0",
-        environment: process.env.NODE_ENV || 'development',
+        environment: config.nodeEnv,
         features: {
           swagger: process.env.ENABLE_SWAGGER === 'true',
           n8n: true,
-          webhooks: true
+          webhooks: true,
+          moduleAliases: moduleAliasConfigured,
+          compiledConfig: compiledModules.config !== null
         }
       };
       
@@ -63,7 +126,7 @@ module.exports = async (req, res) => {
       console.log("✅ Health check enviado");
     });
     
-    // DEBUG ENDPOINT
+    // DEBUG ENDPOINT (mejorado con info de módulos)
     app.get('/debug', (req, res) => {
       console.log("🔍 Debug endpoint");
       
@@ -71,6 +134,14 @@ module.exports = async (req, res) => {
         success: true,
         message: "Debug endpoint funcionando",
         method: "json_as_text_plain",
+        phase: "Fase 1 - Module Aliases",
+        moduleStatus: {
+          aliases: moduleAliasConfigured,
+          config: compiledModules.config !== null,
+          logger: compiledModules.logger !== null,
+          database: compiledModules.database !== null,
+          app: compiledModules.app !== null
+        },
         environment: {
           NODE_ENV: process.env.NODE_ENV,
           ENABLE_SWAGGER: process.env.ENABLE_SWAGGER,
@@ -82,8 +153,9 @@ module.exports = async (req, res) => {
           cwd: process.cwd()
         },
         config: {
-          nodeEnv: process.env.NODE_ENV || 'development',
-          swaggerEnabled: process.env.ENABLE_SWAGGER === 'true'
+          nodeEnv: config.nodeEnv,
+          swaggerEnabled: process.env.ENABLE_SWAGGER === 'true',
+          source: compiledModules.config ? "compiled" : "fallback"
         },
         timestamp: new Date().toISOString()
       };
@@ -101,6 +173,8 @@ module.exports = async (req, res) => {
         message: "Documentación de Imaginarium API",
         note: "Swagger temporalmente deshabilitado, usando respuestas JSON como text/plain",
         version: "1.0.0",
+        phase: "Fase 1 - Module Aliases integrados",
+        moduleAliases: moduleAliasConfigured,
         endpoints: {
           health: {
             method: "GET",
@@ -110,7 +184,7 @@ module.exports = async (req, res) => {
           debug: {
             method: "GET", 
             path: "/debug",
-            description: "Información de debug del sistema"
+            description: "Información de debug del sistema y estado de módulos"
           },
           users: {
             method: "GET",
@@ -138,6 +212,7 @@ module.exports = async (req, res) => {
         success: true,
         message: "Endpoint de usuarios funcionando",
         note: "Base de datos temporalmente deshabilitada para testing",
+        phase: "Fase 1 - Con module aliases",
         data: [],
         meta: {
           total: 0,
@@ -159,6 +234,7 @@ module.exports = async (req, res) => {
         success: true,
         message: "Endpoint de conversaciones funcionando", 
         note: "Base de datos temporalmente deshabilitada para testing",
+        phase: "Fase 1 - Con module aliases",
         data: [],
         meta: {
           total: 0,
@@ -180,8 +256,13 @@ module.exports = async (req, res) => {
         success: true,
         message: "🎉 Imaginarium API - Sistema de Conversaciones con IA",
         version: "1.0.0",
+        phase: "Fase 1 - Module Aliases Integrados",
         status: "Funcionando correctamente con JSON como text/plain",
-        environment: process.env.NODE_ENV || 'development',
+        environment: config.nodeEnv,
+        moduleStatus: {
+          aliases: moduleAliasConfigured,
+          compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null)
+        },
         endpoints: {
           health: "/health",
           docs: "/api-docs", 
@@ -190,7 +271,7 @@ module.exports = async (req, res) => {
           users: "/api/users",
           conversations: "/api/conversations"
         },
-        note: "API completamente funcional usando JSON como text/plain para evitar problemas de Content-Type en Vercel",
+        note: "API funcionando con module aliases configurados. Próximo: cargar módulos compilados gradualmente.",
         timestamp: new Date().toISOString()
       };
       
@@ -204,13 +285,14 @@ module.exports = async (req, res) => {
       
       const apiData = {
         success: true,
-        message: "Imaginarium API v1.0.0",
+        message: "Imaginarium API v1.0.0 - Fase 1",
         documentation: "/api-docs",
         endpoints: {
           users: "/api/users",
           conversations: "/api/conversations"
         },
-        note: "Todas las respuestas en formato JSON válido con Content-Type text/plain"
+        note: "Todas las respuestas en formato JSON válido con Content-Type text/plain",
+        moduleAliases: moduleAliasConfigured
       };
       
       sendJSON(res, apiData);
@@ -241,7 +323,7 @@ module.exports = async (req, res) => {
       sendJSON(res, notFoundData, 404);
     });
     
-    console.log("✅ Express app configurada completamente");
+    console.log("✅ Express app configurada completamente - Fase 1");
     console.log("🚀 Delegando request a Express...");
     
     return app(req, res);
@@ -255,6 +337,7 @@ module.exports = async (req, res) => {
       success: false,
       message: "Error crítico del servidor",
       error: error.message,
+      phase: "Fase 1 - Module Aliases",
       timestamp: new Date().toISOString()
     };
     
