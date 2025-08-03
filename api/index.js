@@ -1,220 +1,193 @@
-// Configurar module alias ANTES de cualquier require
-let moduleAliasStatus = false;
-try {
-  console.log("🔧 Configurando module aliases...");
-  const moduleAlias = require("module-alias");
-  moduleAlias.addAliases({
-    "@domain": __dirname + "/../dist/domain",
-    "@application": __dirname + "/../dist/application", 
-    "@infrastructure": __dirname + "/../dist/infrastructure",
-    "@presentation": __dirname + "/../dist/presentation",
-    "@shared": __dirname + "/../dist/shared"
-  });
-  moduleAliasStatus = true;
-  console.log("✅ Module aliases configurados");
-} catch (error) {
-  console.error("❌ Error configurando module aliases:", error);
-}
+// Versión completamente básica - SIN module aliases ni módulos externos
+console.log("🔥 INICIANDO VERSION BASICA - SIN MODULE ALIASES");
 
-console.log("📁 __dirname:", __dirname);
-console.log("📁 process.cwd():", process.cwd());
-console.log("🌍 NODE_ENV:", process.env.NODE_ENV);
-console.log("📊 ENABLE_SWAGGER:", process.env.ENABLE_SWAGGER);
-console.log("🔗 MONGODB_URI:", process.env.MONGODB_URI ? "✅ Configurado" : "❌ Faltante");
-console.log("🔐 JWT_SECRET:", process.env.JWT_SECRET ? "✅ Configurado" : "❌ Faltante");
-
-// Estado global de módulos con información detallada
-const globalStatus = {
-  moduleAlias: moduleAliasStatus,
-  modules: {
-    config: { loaded: false, error: null },
-    logger: { loaded: false, error: null },
-    database: { loaded: false, error: null },
-    app: { loaded: false, error: null }
-  },
-  environment: {
-    NODE_ENV: process.env.NODE_ENV,
-    ENABLE_SWAGGER: process.env.ENABLE_SWAGGER,
-    MONGODB_URI: process.env.MONGODB_URI ? "Configurado" : "Faltante",
-    JWT_SECRET: process.env.JWT_SECRET ? "Configurado" : "Faltante"
-  },
-  paths: {
-    __dirname: __dirname,
-    cwd: process.cwd()
-  },
+// Variables básicas del entorno
+const envInfo = {
+  NODE_ENV: process.env.NODE_ENV || 'undefined',
+  ENABLE_SWAGGER: process.env.ENABLE_SWAGGER || 'undefined',
+  MONGODB_URI: process.env.MONGODB_URI ? 'Configurado' : 'No configurado',
+  JWT_SECRET: process.env.JWT_SECRET ? 'Configurado' : 'No configurado',
+  dirname: __dirname,
+  cwd: process.cwd(),
+  nodeVersion: process.version,
+  platform: process.platform,
+  arch: process.arch,
   timestamp: new Date().toISOString()
 };
 
-// Variables para los módulos
-let createApp, DatabaseConnection, validateConfig, logger;
+console.log("📊 Info del entorno:", JSON.stringify(envInfo, null, 2));
 
-// Cargar config con manejo ultra-robusto
-console.log("📦 [1/4] Intentando cargar config...");
-try {
-  const configModule = require("../dist/shared/config/config");
-  validateConfig = configModule.validateConfig;
-  globalStatus.modules.config.loaded = true;
-  console.log("✅ Config cargado exitosamente");
-} catch (error) {
-  console.error("❌ Error cargando config:", error.message);
-  globalStatus.modules.config.error = error.message;
-}
-
-// Cargar logger con manejo ultra-robusto
-console.log("📦 [2/4] Intentando cargar logger...");
-try {
-  logger = require("../dist/shared/utils/logger");
-  globalStatus.modules.logger.loaded = true;
-  console.log("✅ Logger cargado exitosamente");
-} catch (error) {
-  console.error("❌ Error cargando logger:", error.message);
-  globalStatus.modules.logger.error = error.message;
-}
-
-// Cargar database con manejo ultra-robusto
-console.log("📦 [3/4] Intentando cargar database connection...");
-try {
-  const dbModule = require("../dist/infrastructure/database/connection");
-  DatabaseConnection = dbModule.DatabaseConnection;
-  globalStatus.modules.database.loaded = true;
-  console.log("✅ Database connection cargado exitosamente");
-} catch (error) {
-  console.error("❌ Error cargando database connection:", error.message);
-  globalStatus.modules.database.error = error.message;
-}
-
-// Cargar app principal con manejo ultra-robusto
-console.log("📦 [4/4] Intentando cargar app principal...");
-try {
-  const appModule = require("../dist/app");
-  createApp = appModule.createApp;
-  globalStatus.modules.app.loaded = true;
-  console.log("✅ App principal cargado exitosamente");
-} catch (error) {
-  console.error("❌ Error cargando app principal:", error.message);
-  globalStatus.modules.app.error = error.message;
-}
-
-console.log("📊 Estado final de carga de módulos:", globalStatus.modules);
-
-// Función ultra-simple para crear app de emergencia
-function createEmergencyApp() {
+// Función ultra-básica que solo usa Express nativo
+function createUltraBasicApp() {
+  console.log("🏗️ Creando app ultra-básica...");
+  
   try {
     const express = require("express");
-    const app = express();
+    console.log("✅ Express importado exitosamente");
     
-    // Solo middlewares esenciales
+    const app = express();
+    console.log("✅ App Express creada");
+    
+    // Middleware ultra-básico
     app.use((req, res, next) => {
-      res.setHeader('Content-Type', 'application/json');
+      console.log(`📨 Request: ${req.method} ${req.url}`);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       next();
     });
     
-    // Rutas ultra-simples
+    // Ruta debug ultra-básica
     app.get('/debug', (req, res) => {
+      console.log("🔍 Procesando ruta /debug");
+      
       try {
         const response = {
           success: true,
-          message: 'Debug endpoint - modo emergencia',
-          status: globalStatus,
-          note: 'Esta es una respuesta de emergencia para evitar crashes'
+          message: "Debug endpoint - versión ultra-básica",
+          info: "Esta versión NO usa module aliases ni módulos compilados",
+          environment: envInfo,
+          test: "Si ves esto, la configuración básica de Vercel funciona"
         };
+        
+        console.log("📤 Enviando respuesta debug");
         res.status(200).json(response);
+        console.log("✅ Respuesta debug enviada");
+        
       } catch (error) {
-        res.status(200).send('{"success":false,"message":"Error en debug","error":"' + error.message + '"}');
+        console.error("❌ Error en ruta debug:", error);
+        res.status(500).send('{"success":false,"message":"Error procesando debug"}');
       }
     });
     
+    // Ruta health ultra-básica
     app.get('/health', (req, res) => {
+      console.log("💚 Procesando ruta /health");
+      
       try {
         res.status(200).json({
           success: true,
-          message: 'API funcionando - modo emergencia',
-          version: '1.0.0-emergency'
+          message: "Health check - versión ultra-básica",
+          status: "OK",
+          version: "1.0.0-ultra-basic",
+          timestamp: new Date().toISOString()
         });
+        console.log("✅ Respuesta health enviada");
+        
       } catch (error) {
-        res.status(200).send('{"success":false,"message":"Error en health"}');
+        console.error("❌ Error en health:", error);
+        res.status(200).send('{"success":true,"message":"Health OK"}');
       }
     });
     
+    // Ruta raíz
     app.get('/', (req, res) => {
+      console.log("🏠 Procesando ruta raíz");
+      
       try {
         res.status(200).json({
           success: true,
-          message: 'Modo Emergencia - Algunos módulos fallaron al cargar',
-          version: '1.0.0-emergency'
+          message: "Imaginarium API - Versión Ultra-Básica",
+          note: "Esta versión usa solo Express básico para diagnosticar problemas",
+          version: "1.0.0-ultra-basic",
+          endpoints: ["/health", "/debug"],
+          timestamp: new Date().toISOString()
         });
+        console.log("✅ Respuesta raíz enviada");
+        
       } catch (error) {
-        res.status(200).send('{"success":false,"message":"Error en root"}');
+        console.error("❌ Error en raíz:", error);
+        res.status(200).send('{"success":true,"message":"API básica funcionando"}');
       }
     });
     
+    // Catch-all ultra-básico
     app.use('*', (req, res) => {
+      console.log(`❓ Ruta no encontrada: ${req.method} ${req.url}`);
+      
       try {
         res.status(404).json({
           success: false,
-          message: 'Endpoint no encontrado - modo emergencia',
-          path: req.url
+          message: "Endpoint no encontrado",
+          path: req.url,
+          method: req.method,
+          availableEndpoints: ["/", "/health", "/debug"]
         });
       } catch (error) {
         res.status(404).send('{"success":false,"message":"Not found"}');
       }
     });
     
+    console.log("✅ App ultra-básica configurada completamente");
     return app;
+    
   } catch (error) {
-    console.error("💥 Error crítico creando app de emergencia:", error);
+    console.error("💥 ERROR CRÍTICO creando app ultra-básica:", error);
     return null;
   }
 }
 
-// Handler para Vercel - Ultra robusto
+// Handler ultra-básico para Vercel
 module.exports = async (req, res) => {
-  console.log(`🔥 Request recibido: ${req.method} ${req.url}`);
+  console.log(`🚀 HANDLER INICIADO: ${req.method} ${req.url}`);
+  console.log(`📡 User-Agent: ${req.headers['user-agent']}`);
+  console.log(`🌐 Host: ${req.headers.host}`);
   
   try {
-    // Headers de seguridad ultra-básicos
-    res.setHeader('Content-Type', 'application/json');
+    // Headers básicos inmediatos
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     
-    // Manejar OPTIONS
+    console.log("✅ Headers configurados");
+    
+    // Manejar OPTIONS inmediatamente
     if (req.method === 'OPTIONS') {
-      console.log("✅ Respondiendo a preflight OPTIONS");
+      console.log("⚡ Respondiendo OPTIONS inmediatamente");
       res.status(200).end();
       return;
     }
-
-    console.log("🚀 Creando aplicación de emergencia...");
-    const app = createEmergencyApp();
+    
+    console.log("🏗️ Creando app...");
+    const app = createUltraBasicApp();
     
     if (!app) {
-      console.error("💥 CRÍTICO: No se pudo crear ni la app de emergencia");
-      res.status(500).send('{"success":false,"message":"Error crítico del servidor"}');
+      console.error("💥 No se pudo crear app, enviando respuesta de emergencia");
+      
+      // Respuesta de emergencia absoluta
+      const emergencyResponse = JSON.stringify({
+        success: false,
+        message: "Error crítico: No se pudo crear la aplicación básica",
+        timestamp: new Date().toISOString()
+      });
+      
+      res.status(500).send(emergencyResponse);
       return;
     }
     
-    console.log("✅ App de emergencia creada, procesando request...");
+    console.log("✅ App creada, delegando request...");
     return app(req, res);
     
   } catch (error) {
-    console.error("💥 Error crítico en handler:", error);
+    console.error("💥💥 ERROR CRÍTICO EN HANDLER:", error);
+    console.error("Stack:", error.stack);
     
-    // Respuesta de último recurso
     try {
-      res.status(500).json({
+      // Último recurso
+      const errorResponse = JSON.stringify({
         success: false,
-        message: "Error crítico del servidor",
+        message: "Error crítico en handler",
         error: error.message,
         timestamp: new Date().toISOString()
       });
+      
+      res.status(500).send(errorResponse);
+      
     } catch (finalError) {
-      // Si ni siquiera podemos enviar JSON, enviar texto plano
-      console.error("💥💥 Error enviando respuesta de error:", finalError);
-      res.status(500).send('{"success":false,"message":"Error crítico del servidor"}');
+      console.error("💥💥💥 ERROR FINAL:", finalError);
+      res.status(500).send('{"success":false,"message":"Error crítico"}');
     }
   }
 }; 
