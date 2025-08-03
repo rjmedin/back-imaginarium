@@ -16,7 +16,7 @@
   },
   "functions": {
     "api/app.js": {
-      "runtime": "@vercel/node@3.0.5"
+      "runtime": "@vercel/node@latest"
     }
   }
 }
