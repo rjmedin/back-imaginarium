@@ -107,14 +107,16 @@ async function connectToMongoDB() {
     
     console.log("🔗 Conectando directamente a MongoDB...");
     
-    // Configuración de conexión con timeouts cortos
-    await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 5000, // 5 segundos timeout
-      connectTimeoutMS: 5000,         // 5 segundos para conectar
-      socketTimeoutMS: 5000,          // 5 segundos para operaciones
-      bufferMaxEntries: 0,            // No buffer operations
-      maxPoolSize: 5,                 // Max 5 conexiones
-    });
+         // Configuración de conexión con timeouts cortos (compatible con mongoose moderno)
+     await mongoose.connect(mongoUri, {
+       serverSelectionTimeoutMS: 5000, // 5 segundos timeout
+       connectTimeoutMS: 5000,         // 5 segundos para conectar
+       socketTimeoutMS: 5000,          // 5 segundos para operaciones
+       maxPoolSize: 5,                 // Max 5 conexiones
+     });
+     
+     // Deshabilitar buffering después de la conexión (alternativa moderna)
+     mongoose.set('bufferCommands', false);
     
     console.log("✅ Conectado a MongoDB exitosamente");
     
