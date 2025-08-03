@@ -42,38 +42,135 @@ if (moduleAliasConfigured) {
 // PASO 3: Conexión directa a MongoDB (sin módulos compilados)
 const mongoose = require('mongoose');
 
+// Estado global de conexión más robusto
 let mongoConnection = {
   connected: false,
   reason: "Not initialized",
-  mode: "offline"
+  mode: "offline",
+  lastAttempt: null,
+  ipWhitelistIssue: false,
+  connectionAttempts: 0,
+  maxAttempts: 3
 };
 
-// Función para conectar directamente a MongoDB
+// Función para detectar problemas específicos de MongoDB Atlas
+function analyzeMongoError(error) {
+  const errorMessage = error.message.toLowerCase();
+  
+  if (errorMessage.includes('ip') && errorMessage.includes('whitelist')) {
+    return {
+      type: 'IP_WHITELIST',
+      message: '🚨 IP de Vercel no está en MongoDB Atlas Whitelist',
+      solution: 'Configurar 0.0.0.0/0 en Atlas Network Access',
+      critical: true
+    };
+  }
+  
+  if (errorMessage.includes('authentication failed')) {
+    return {
+      type: 'AUTH_ERROR',
+      message: '🔐 Error de autenticación en MongoDB',
+      solution: 'Verificar credenciales en MONGODB_URI',
+      critical: true
+    };
+  }
+  
+  if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+    return {
+      type: 'TIMEOUT',
+      message: '⏱️ Timeout de conexión o operación',
+      solution: 'Verificar conectividad de red',
+      critical: false
+    };
+  }
+  
+  return {
+    type: 'UNKNOWN',
+    message: error.message,
+    solution: 'Revisar configuración de MongoDB',
+    critical: false
+  };
+}
+
+// Función mejorada para conectar a MongoDB
 async function connectToMongoDB() {
+  // No reintentar si ya se intentó recientemente
+  if (mongoConnection.lastAttempt && 
+      Date.now() - mongoConnection.lastAttempt < 30000 && // 30 segundos
+      mongoConnection.connectionAttempts >= mongoConnection.maxAttempts) {
+    console.log("⏸️ Evitando reconexión prematura a MongoDB");
+    return mongoConnection;
+  }
+  
   try {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/imaginarium_db';
     
     console.log("🔗 Conectando directamente a MongoDB...");
+    
+    // Configuración de conexión con timeouts cortos
     await mongoose.connect(mongoUri, {
-      // Opciones modernas de conexión
-      // useNewUrlParser y useUnifiedTopology ya no son necesarias en mongoose 6+
+      serverSelectionTimeoutMS: 5000, // 5 segundos timeout
+      connectTimeoutMS: 5000,         // 5 segundos para conectar
+      socketTimeoutMS: 5000,          // 5 segundos para operaciones
+      bufferMaxEntries: 0,            // No buffer operations
+      maxPoolSize: 5,                 // Max 5 conexiones
     });
     
     console.log("✅ Conectado a MongoDB exitosamente");
     
+    // Reset de contadores en caso de éxito
+    mongoConnection.connectionAttempts = 0;
+    mongoConnection.lastAttempt = Date.now();
+    
     return {
       connected: true,
       reason: "Connected successfully",
-      mode: "online"
+      mode: "online",
+      lastAttempt: Date.now(),
+      ipWhitelistIssue: false,
+      connectionAttempts: mongoConnection.connectionAttempts
     };
   } catch (error) {
     console.error("⚠️ Error conectando a MongoDB:", error.message);
     
+    const errorAnalysis = analyzeMongoError(error);
+    mongoConnection.connectionAttempts++;
+    mongoConnection.lastAttempt = Date.now();
+    
+    console.error("📊 Análisis del error:", errorAnalysis);
+    
     return {
       connected: false,
       reason: error.message,
-      mode: "offline"
+      mode: "offline",
+      lastAttempt: Date.now(),
+      ipWhitelistIssue: errorAnalysis.type === 'IP_WHITELIST',
+      connectionAttempts: mongoConnection.connectionAttempts,
+      errorAnalysis: errorAnalysis
     };
+  }
+}
+
+// Función para verificar si la conexión está realmente operativa
+async function testMongoConnection() {
+  if (!mongoConnection.connected) {
+    return false;
+  }
+  
+  try {
+    // Test simple con timeout corto
+    await mongoose.connection.db.admin().ping();
+    console.log("✅ MongoDB ping exitoso");
+    return true;
+  } catch (error) {
+    console.error("❌ MongoDB ping falló:", error.message);
+    
+    // Actualizar estado si el ping falla
+    mongoConnection.connected = false;
+    mongoConnection.reason = `Ping failed: ${error.message}`;
+    mongoConnection.mode = "offline";
+    
+    return false;
   }
 }
 
@@ -144,6 +241,60 @@ function getLogger() {
   };
 }
 
+// Función para ejecutar operaciones de MongoDB con timeout y fallback
+async function safeMongoOperation(operation, fallbackData, operationName) {
+  // Verificar conexión primero
+  const isConnected = await testMongoConnection();
+  
+  if (!isConnected) {
+    console.log(`⚠️ MongoDB no operativo para ${operationName}, usando fallback`);
+    return {
+      success: true,
+      data: fallbackData,
+      source: 'fallback',
+      reason: 'MongoDB not operational'
+    };
+  }
+  
+  try {
+    console.log(`🔄 Ejecutando operación MongoDB: ${operationName}`);
+    
+    // Timeout promise para operaciones
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Operation timeout (3s)')), 3000);
+    });
+    
+    // Race entre la operación y el timeout
+    const result = await Promise.race([operation(), timeoutPromise]);
+    
+    console.log(`✅ Operación ${operationName} exitosa`);
+    return {
+      success: true,
+      data: result,
+      source: 'mongodb',
+      reason: 'Operation successful'
+    };
+  } catch (error) {
+    console.error(`❌ Error en operación ${operationName}:`, error.message);
+    
+    // Analizar error y actualizar estado de conexión si es crítico
+    const errorAnalysis = analyzeMongoError(error);
+    if (errorAnalysis.critical) {
+      mongoConnection.connected = false;
+      mongoConnection.reason = error.message;
+      mongoConnection.mode = "offline";
+    }
+    
+    return {
+      success: false,
+      data: fallbackData,
+      source: 'fallback',
+      reason: error.message,
+      errorAnalysis: errorAnalysis
+    };
+  }
+}
+
 module.exports = async (req, res) => {
   console.log("📥 Request:", req.method, req.url);
   
@@ -167,15 +318,16 @@ module.exports = async (req, res) => {
     const config = getConfig();
     const logger = getLogger();
     
-    // Intentar conectar a MongoDB (solo una vez)
-    if (mongoConnection.reason === "Not initialized") {
+    // Intentar conectar a MongoDB (solo una vez por intervalo)
+    if (mongoConnection.reason === "Not initialized" || 
+        (Date.now() - mongoConnection.lastAttempt > 60000)) { // 1 minuto entre reintentos
       logger.info('Intentando conectar a MongoDB directamente...');
       mongoConnection = await connectToMongoDB();
       logger.info('Estado de MongoDB', mongoConnection);
     }
     
     logger.info('Express app iniciándose', { 
-      phase: 'Fase 2 - MongoDB Directo',
+      phase: 'Fase 2 - MongoDB Robusto',
       compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null),
       mongoStatus: mongoConnection
     });
@@ -193,7 +345,7 @@ module.exports = async (req, res) => {
       
       const healthData = {
         success: true,
-        message: "API funcionando correctamente con MongoDB directo.",
+        message: "API funcionando correctamente con MongoDB robusto.",
         timestamp: new Date().toISOString(),
         version: "1.0.0",
         environment: config.nodeEnv,
@@ -203,7 +355,8 @@ module.exports = async (req, res) => {
           webhooks: true,
           moduleAliases: moduleAliasConfigured,
           compiledConfig: compiledModules.config !== null,
-          directMongoDB: true
+          directMongoDB: true,
+          mongoRobustHandling: true
         },
         database: mongoConnection
       };
@@ -220,7 +373,7 @@ module.exports = async (req, res) => {
         success: true,
         message: "Debug endpoint funcionando",
         method: "json_as_text_plain",
-        phase: "Fase 2 - MongoDB Directo + Datos Reales",
+        phase: "Fase 2 - MongoDB Robusto + Manejo de Errores",
         moduleStatus: {
           aliases: moduleAliasConfigured,
           config: compiledModules.config !== null,
@@ -230,10 +383,17 @@ module.exports = async (req, res) => {
         },
         directConnections: {
           mongoose: mongoConnection.connected,
-          models: mongoConnection.connected ? ["User", "Conversation"] : []
+          models: mongoConnection.connected ? ["User", "Conversation"] : [],
+          timeouts: "3s operations, 5s connection",
+          reconnectStrategy: "Smart with backoff"
         },
         loadedModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null),
         database: mongoConnection,
+        mongoAtlasHelp: mongoConnection.ipWhitelistIssue ? {
+          problem: "🚨 IP Whitelist Issue detectado",
+          solution: "1. Ir a MongoDB Atlas → Network Access\n2. Add IP Address → 0.0.0.0/0 (Allow from anywhere)\n3. Guardar y esperar 1-2 minutos",
+          documentation: "https://www.mongodb.com/docs/atlas/security-whitelist/"
+        } : null,
         environment: {
           NODE_ENV: process.env.NODE_ENV,
           ENABLE_SWAGGER: process.env.ENABLE_SWAGGER,
@@ -256,158 +416,112 @@ module.exports = async (req, res) => {
       logger.info('Debug enviado exitosamente');
     });
     
-    // API/USERS ENDPOINT - CON DATOS REALES
+    // API/USERS ENDPOINT - CON MANEJO ROBUSTO
     app.get('/api/users', async (req, res) => {
       logger.info('Users endpoint solicitado');
       
-      try {
-        if (mongoConnection.connected) {
-          // Cargar usuarios reales de MongoDB
+      // Datos mock como fallback
+      const mockUsers = [
+        {
+          _id: "mock1",
+          email: "usuario1@example.com",
+          name: "Usuario Demo 1",
+          createdAt: new Date().toISOString()
+        },
+        {
+          _id: "mock2", 
+          email: "usuario2@example.com",
+          name: "Usuario Demo 2",
+          createdAt: new Date().toISOString()
+        }
+      ];
+      
+      // Intentar operación MongoDB con fallback inteligente
+      const result = await safeMongoOperation(
+        async () => {
           const users = await User.find({}).select('-password').limit(10);
           const total = await User.countDocuments();
-          
-          const usersData = {
-            success: true,
-            message: "Usuarios cargados desde MongoDB",
-            database: mongoConnection,
-            phase: "Fase 2 - Datos reales de MongoDB",
-            data: users,
-            meta: {
-              total: total,
-              page: 1,
-              limit: 10,
-              source: "mongodb"
-            },
-            timestamp: new Date().toISOString()
-          };
-          
-          sendJSON(res, usersData);
-          logger.info('Users reales enviados exitosamente', { count: users.length });
-        } else {
-          // Datos mock si no hay conexión
-          const mockUsers = [
-            {
-              _id: "mock1",
-              email: "usuario1@example.com",
-              name: "Usuario Demo 1",
-              createdAt: new Date().toISOString()
-            },
-            {
-              _id: "mock2", 
-              email: "usuario2@example.com",
-              name: "Usuario Demo 2",
-              createdAt: new Date().toISOString()
-            }
-          ];
-          
-          const usersData = {
-            success: true,
-            message: "Usuarios mock (MongoDB no conectado)",
-            database: mongoConnection,
-            phase: "Fase 2 - Modo offline con datos mock",
-            data: mockUsers,
-            meta: {
-              total: 2,
-              page: 1,
-              limit: 10,
-              source: "mock"
-            },
-            timestamp: new Date().toISOString()
-          };
-          
-          sendJSON(res, usersData);
-          logger.info('Users mock enviados');
-        }
-      } catch (error) {
-        logger.error('Error en users endpoint', error);
-        
-        const errorData = {
-          success: false,
-          message: "Error al cargar usuarios",
-          error: error.message,
-          database: mongoConnection,
-          timestamp: new Date().toISOString()
-        };
-        
-        sendJSON(res, errorData, 500);
-      }
+          return { users, total };
+        },
+        { users: mockUsers, total: mockUsers.length },
+        'users.find'
+      );
+      
+      const usersData = {
+        success: true,
+        message: result.source === 'mongodb' ? 
+          "Usuarios cargados desde MongoDB" : 
+          "Usuarios mock (MongoDB no operativo)",
+        database: mongoConnection,
+        phase: "Fase 2 - MongoDB Robusto",
+        data: result.data.users,
+        meta: {
+          total: result.data.total,
+          page: 1,
+          limit: 10,
+          source: result.source,
+          reason: result.reason
+        },
+        troubleshooting: result.errorAnalysis || null,
+        timestamp: new Date().toISOString()
+      };
+      
+      sendJSON(res, usersData);
+      logger.info('Users enviados exitosamente', { source: result.source, count: result.data.users.length });
     });
     
-    // API/CONVERSATIONS ENDPOINT - CON DATOS REALES
+    // API/CONVERSATIONS ENDPOINT - CON MANEJO ROBUSTO
     app.get('/api/conversations', async (req, res) => {
       logger.info('Conversations endpoint solicitado');
       
-      try {
-        if (mongoConnection.connected) {
-          // Cargar conversaciones reales de MongoDB
+      // Datos mock como fallback
+      const mockConversations = [
+        {
+          _id: "conv1",
+          title: "Conversación Demo 1",
+          userId: { name: "Usuario Demo", email: "demo@example.com" },
+          messages: [
+            { role: "user", content: "Hola", timestamp: new Date().toISOString() },
+            { role: "assistant", content: "¡Hola! ¿En qué puedo ayudarte?", timestamp: new Date().toISOString() }
+          ],
+          createdAt: new Date().toISOString()
+        }
+      ];
+      
+      // Intentar operación MongoDB con fallback inteligente
+      const result = await safeMongoOperation(
+        async () => {
           const conversations = await Conversation.find({})
             .populate('userId', 'name email')
             .limit(10);
           const total = await Conversation.countDocuments();
-          
-          const conversationsData = {
-            success: true,
-            message: "Conversaciones cargadas desde MongoDB",
-            database: mongoConnection,
-            phase: "Fase 2 - Datos reales de MongoDB",
-            data: conversations,
-            meta: {
-              total: total,
-              page: 1,
-              limit: 10,
-              source: "mongodb"
-            },
-            timestamp: new Date().toISOString()
-          };
-          
-          sendJSON(res, conversationsData);
-          logger.info('Conversations reales enviadas exitosamente', { count: conversations.length });
-        } else {
-          // Datos mock si no hay conexión
-          const mockConversations = [
-            {
-              _id: "conv1",
-              title: "Conversación Demo 1",
-              userId: { name: "Usuario Demo", email: "demo@example.com" },
-              messages: [
-                { role: "user", content: "Hola", timestamp: new Date().toISOString() },
-                { role: "assistant", content: "¡Hola! ¿En qué puedo ayudarte?", timestamp: new Date().toISOString() }
-              ],
-              createdAt: new Date().toISOString()
-            }
-          ];
-          
-          const conversationsData = {
-            success: true,
-            message: "Conversaciones mock (MongoDB no conectado)",
-            database: mongoConnection,
-            phase: "Fase 2 - Modo offline con datos mock",
-            data: mockConversations,
-            meta: {
-              total: 1,
-              page: 1,
-              limit: 10,
-              source: "mock"
-            },
-            timestamp: new Date().toISOString()
-          };
-          
-          sendJSON(res, conversationsData);
-          logger.info('Conversations mock enviadas');
-        }
-      } catch (error) {
-        logger.error('Error en conversations endpoint', error);
-        
-        const errorData = {
-          success: false,
-          message: "Error al cargar conversaciones",
-          error: error.message,
-          database: mongoConnection,
-          timestamp: new Date().toISOString()
-        };
-        
-        sendJSON(res, errorData, 500);
-      }
+          return { conversations, total };
+        },
+        { conversations: mockConversations, total: mockConversations.length },
+        'conversations.find'
+      );
+      
+      const conversationsData = {
+        success: true,
+        message: result.source === 'mongodb' ? 
+          "Conversaciones cargadas desde MongoDB" : 
+          "Conversaciones mock (MongoDB no operativo)",
+        database: mongoConnection,
+        phase: "Fase 2 - MongoDB Robusto",
+        data: result.data.conversations,
+        meta: {
+          total: result.data.total,
+          page: 1,
+          limit: 10,
+          source: result.source,
+          reason: result.reason
+        },
+        troubleshooting: result.errorAnalysis || null,
+        timestamp: new Date().toISOString()
+      };
+      
+      sendJSON(res, conversationsData);
+      logger.info('Conversations enviadas exitosamente', { source: result.source, count: result.data.conversations.length });
     });
     
     // PÁGINA PRINCIPAL
@@ -418,7 +532,7 @@ module.exports = async (req, res) => {
         success: true,
         message: "🎉 Imaginarium API - Sistema de Conversaciones con IA",
         version: "1.0.0",
-        phase: "Fase 2 - MongoDB Directo + Datos Reales",
+        phase: "Fase 2 - MongoDB Robusto + Manejo de Errores",
         status: mongoConnection.connected ? 
           "Funcionando con datos reales de MongoDB" : 
           "Funcionando en modo offline con datos mock",
@@ -430,9 +544,14 @@ module.exports = async (req, res) => {
           users: "/api/users - " + (mongoConnection.connected ? "DATOS REALES" : "datos mock"),
           conversations: "/api/conversations - " + (mongoConnection.connected ? "DATOS REALES" : "datos mock")
         },
+        mongoAtlasHelp: mongoConnection.ipWhitelistIssue ? {
+          problem: "🚨 Detectado problema de IP Whitelist en MongoDB Atlas",
+          quickFix: "Configurar 0.0.0.0/0 en Atlas Network Access",
+          documentation: "https://www.mongodb.com/docs/atlas/security-whitelist/"
+        } : null,
         note: mongoConnection.connected ? 
           "🚀 ¡API completamente funcional con base de datos real!" :
-          "⚠️ API funcionando en modo offline. Configura MONGODB_URI para datos reales.",
+          "⚠️ API funcionando en modo offline. " + (mongoConnection.ipWhitelistIssue ? "Configurar IP whitelist en Atlas." : "Verificar configuración de MongoDB."),
         timestamp: new Date().toISOString()
       };
       
@@ -444,13 +563,14 @@ module.exports = async (req, res) => {
     app.get('/api', (req, res) => {
       const apiData = {
         success: true,
-        message: "Imaginarium API v1.0.0 - Fase 2 (MongoDB Directo)",
+        message: "Imaginarium API v1.0.0 - Fase 2 (MongoDB Robusto)",
         endpoints: {
           users: "/api/users",
           conversations: "/api/conversations"
         },
         database: mongoConnection,
         dataSource: mongoConnection.connected ? "MongoDB Real" : "Mock Data",
+        fallbackStrategy: "Automatic fallback to mock data on MongoDB issues",
         note: "Responses como JSON con Content-Type text/plain"
       };
       
@@ -471,9 +591,9 @@ module.exports = async (req, res) => {
       sendJSON(res, notFoundData, 404);
     });
     
-    console.log("✅ Express app configurada completamente - Fase 2 (MongoDB Directo)");
+    console.log("✅ Express app configurada completamente - Fase 2 (MongoDB Robusto)");
     logger.info('Express app configurada completamente', { 
-      phase: 'Fase 2 - MongoDB Directo',
+      phase: 'Fase 2 - MongoDB Robusto',
       mongoStatus: mongoConnection 
     });
     console.log("🚀 Delegando request a Express...");
@@ -488,7 +608,7 @@ module.exports = async (req, res) => {
       success: false,
       message: "Error crítico del servidor",
       error: error.message,
-      phase: "Fase 2 - MongoDB Directo",
+      phase: "Fase 2 - MongoDB Robusto",
       timestamp: new Date().toISOString()
     };
     
