@@ -1,0 +1,57 @@
+### Variables
+@baseUrl = http://localhost:3000
+@token = 
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Registrar usuario
+POST {{baseUrl}}/api/v1/users/register
+Content-Type: application/json
+
+{
+  "name": "Juan Pérez",
+  "email": "juan@ejemplo.com",
+  "password": "123456"
+}
+
+### Registrar usuario admin
+POST {{baseUrl}}/api/v1/users/register
+Content-Type: application/json
+
+{
+  "name": "Admin",
+  "email": "admin@ejemplo.com",
+  "password": "123456",
+  "role": "admin"
+}
+
+### Login
+POST {{baseUrl}}/api/v1/users/login
+Content-Type: application/json
+
+{
+  "email": "juan@ejemplo.com",
+  "password": "123456"
+}
+
+### Login Admin
+POST {{baseUrl}}/api/v1/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@ejemplo.com",
+  "password": "123456"
+}
+
+### Obtener perfil (reemplaza el token)
+GET {{baseUrl}}/api/v1/users/profile
+Authorization: Bearer {{token}}
+
+### Listar usuarios (solo admin)
+GET {{baseUrl}}/api/v1/users?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### Listar usuarios con paginación
+GET {{baseUrl}}/api/v1/users?page=2&limit=5
+Authorization: Bearer {{token}} 

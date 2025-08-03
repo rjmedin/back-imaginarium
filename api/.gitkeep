@@ -1,0 +1,2 @@
+# Este archivo asegura que el directorio api se mantenga en git
+# Vercel needs this directory structure for serverless functions 

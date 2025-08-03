@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/app.js",
+      "use": "@vercel/node@3.0.0",
+      "config": {
+        "runtime": "nodejs18.x"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api-docs(.*)",
+      "dest": "/api/app.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/app.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "ENABLE_SWAGGER": "true"
+  },
+  "functions": {
+    "api/app.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}

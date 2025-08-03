@@ -1,0 +1,162 @@
+### Variables
+@baseUrl = http://localhost:3000
+@token = 
+@conversationId = 
+
+### ======================
+### USUARIOS
+### ======================
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Registrar usuario
+POST {{baseUrl}}/api/v1/users/register
+Content-Type: application/json
+
+{
+  "name": "Usuario IA",
+  "email": "usuario@ia.com",
+  "password": "123456"
+}
+
+### Login
+POST {{baseUrl}}/api/v1/users/login
+Content-Type: application/json
+
+{
+  "email": "usuario@ia.com",
+  "password": "123456"
+}
+
+### Obtener perfil
+GET {{baseUrl}}/api/v1/users/profile
+Authorization: Bearer {{token}}
+
+### Listar usuarios (solo admin)
+GET {{baseUrl}}/api/v1/users?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### ======================
+### CONVERSACIONES
+### ======================
+
+### Crear conversación
+POST {{baseUrl}}/api/v1/conversations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Conversación sobre JavaScript",
+  "description": "Preguntas y respuestas sobre desarrollo web"
+}
+
+### Listar conversaciones del usuario
+GET {{baseUrl}}/api/v1/conversations?page=1&limit=10
+Authorization: Bearer {{token}}
+
+### ======================
+### MENSAJES
+### ======================
+
+### Agregar mensaje del usuario
+POST {{baseUrl}}/api/v1/conversations/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "{{conversationId}}",
+  "content": "¿Puedes explicarme qué es JavaScript y para qué se usa?",
+  "messageType": "user",
+  "metadata": {
+    "userAgent": "Mozilla/5.0...",
+    "timestamp": "2024-01-15T10:30:00Z"
+  }
+}
+
+### Agregar respuesta de IA
+POST {{baseUrl}}/api/v1/conversations/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "{{conversationId}}",
+  "content": "JavaScript es un lenguaje de programación versátil que se ejecuta principalmente en navegadores web. Se usa para crear interactividad en páginas web, validar formularios, manipular el DOM, hacer peticiones AJAX y mucho más. También se puede usar en el servidor con Node.js.",
+  "messageType": "ai",
+  "metadata": {
+    "aiModel": "gpt-4",
+    "processingTime": 1500,
+    "tokens": 85,
+    "temperature": 0.7,
+    "maxTokens": 150
+  }
+}
+
+### Agregar mensaje de sistema
+POST {{baseUrl}}/api/v1/conversations/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "{{conversationId}}",
+  "content": "Conversación iniciada. El asistente está listo para ayudarte.",
+  "messageType": "system",
+  "metadata": {
+    "systemEvent": "conversation_started",
+    "version": "1.0"
+  }
+}
+
+### Obtener mensajes de una conversación
+GET {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages?page=1&limit=50
+Authorization: Bearer {{token}}
+
+### Obtener mensajes con paginación
+GET {{baseUrl}}/api/v1/conversations/{{conversationId}}/messages?page=2&limit=20
+Authorization: Bearer {{token}}
+
+### ======================
+### EJEMPLOS COMPLETOS
+### ======================
+
+### Ejemplo: Conversación técnica completa
+POST {{baseUrl}}/api/v1/conversations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Ayuda con React Hooks",
+  "description": "Conversación sobre el uso de hooks en React"
+}
+
+###
+
+POST {{baseUrl}}/api/v1/conversations/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "REEMPLAZAR_CON_ID_CONVERSACION",
+  "content": "¿Cómo funciona useEffect en React? ¿Puedes darme un ejemplo práctico?",
+  "messageType": "user"
+}
+
+###
+
+POST {{baseUrl}}/api/v1/conversations/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "conversationId": "REEMPLAZAR_CON_ID_CONVERSACION",
+  "content": "useEffect es un hook que te permite realizar efectos secundarios en componentes funcionales. Se ejecuta después de que el componente se renderiza.\n\nEjemplo básico:\n```javascript\nimport { useEffect, useState } from 'react';\n\nfunction MiComponente() {\n  const [datos, setDatos] = useState([]);\n\n  useEffect(() => {\n    // Este código se ejecuta después del render\n    fetch('/api/datos')\n      .then(response => response.json())\n      .then(datos => setDatos(datos));\n  }, []); // Array vacío significa que solo se ejecuta una vez\n\n  return <div>{/* renderizar datos */}</div>;\n}\n```\n\nEl segundo parámetro (array de dependencias) controla cuándo se re-ejecuta el efecto.",
+  "messageType": "ai",
+  "metadata": {
+    "aiModel": "gpt-4-turbo",
+    "processingTime": 2300,
+    "tokens": 180,
+    "temperature": 0.3,
+    "codeExample": true,
+    "language": "javascript"
+  }
+} 
