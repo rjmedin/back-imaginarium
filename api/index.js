@@ -1,5 +1,5 @@
 // Imaginarium API - Fase 1: Agregando Module Aliases gradualmente
-console.log("🚀 Imaginarium API - Fase 1: Module Aliases");
+console.log("🚀 Imaginarium API - Fase 1: Module Aliases + Database");
 
 // PASO 1: Configurar module aliases (manteniendo compatibilidad)
 let moduleAliasConfigured = false;
@@ -53,6 +53,19 @@ if (moduleAliasConfigured) {
   }
 }
 
+// Intentar cargar database connection compilado
+if (moduleAliasConfigured) {
+  try {
+    console.log("📦 Intentando cargar database connection compilado...");
+    const dbModule = require("../dist/infrastructure/database/connection");
+    compiledModules.database = dbModule.DatabaseConnection;
+    console.log("✅ Database connection compilado cargado exitosamente");
+  } catch (error) {
+    console.error("⚠️ No se pudo cargar database connection compilado:", error.message);
+    console.log("📝 Database connection no disponible - usando modo offline");
+  }
+}
+
 // Función helper para enviar JSON como text/plain (mantener funcionando)
 function sendJSON(res, data, statusCode = 200) {
   try {
@@ -102,6 +115,58 @@ function getLogger() {
   }
 }
 
+// Función para database connection (compilado o fallback)
+function getDatabaseConnection() {
+  if (compiledModules.database) {
+    console.log("🗄️ Usando database connection compilado");
+    return compiledModules.database;
+  } else {
+    console.log("🗄️ Database connection no disponible - modo offline");
+    return null;
+  }
+}
+
+// Función para intentar conectar a la base de datos
+async function tryConnectDatabase() {
+  const DatabaseConnection = getDatabaseConnection();
+  
+  if (!DatabaseConnection) {
+    return {
+      connected: false,
+      reason: "DatabaseConnection class not available",
+      mode: "offline"
+    };
+  }
+
+  try {
+    console.log("🔗 Intentando conectar a MongoDB...");
+    const db = DatabaseConnection.getInstance();
+    await db.connect();
+    console.log("✅ Conectado a MongoDB exitosamente");
+    
+    return {
+      connected: true,
+      reason: "Connected successfully",
+      mode: "online"
+    };
+  } catch (error) {
+    console.error("⚠️ Error conectando a MongoDB:", error.message);
+    
+    return {
+      connected: false,
+      reason: error.message,
+      mode: "offline"
+    };
+  }
+}
+
+// Variable global para estado de la base de datos
+let databaseStatus = {
+  connected: false,
+  reason: "Not initialized",
+  mode: "offline"
+};
+
 module.exports = async (req, res) => {
   console.log("📥 Request:", req.method, req.url);
   
@@ -126,10 +191,18 @@ module.exports = async (req, res) => {
     const config = getConfig();
     const logger = getLogger();
     
+    // Intentar conectar a la base de datos (solo una vez)
+    if (databaseStatus.reason === "Not initialized") {
+      logger.info('Intentando conectar a la base de datos...');
+      databaseStatus = await tryConnectDatabase();
+      logger.info('Estado de la base de datos', databaseStatus);
+    }
+    
     // Usar logger compilado si está disponible
     logger.info('Express app iniciándose', { 
-      phase: 'Fase 1 - Module Aliases',
-      compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null)
+      phase: 'Fase 1 - Module Aliases + Database',
+      compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null),
+      databaseStatus: databaseStatus
     });
     
     // Middleware básico
@@ -139,7 +212,7 @@ module.exports = async (req, res) => {
       next();
     });
     
-    // HEALTH CHECK (mejorado con config)
+    // HEALTH CHECK (mejorado con database status)
     app.get('/health', (req, res) => {
       logger.info('Health check solicitado');
       
@@ -155,15 +228,17 @@ module.exports = async (req, res) => {
           webhooks: true,
           moduleAliases: moduleAliasConfigured,
           compiledConfig: compiledModules.config !== null,
-          compiledLogger: compiledModules.logger !== null
-        }
+          compiledLogger: compiledModules.logger !== null,
+          compiledDatabase: compiledModules.database !== null
+        },
+        database: databaseStatus
       };
       
       sendJSON(res, healthData);
       logger.info('Health check enviado exitosamente');
     });
     
-    // DEBUG ENDPOINT (mejorado con info de módulos)
+    // DEBUG ENDPOINT (mejorado con database info)
     app.get('/debug', (req, res) => {
       logger.info('Debug endpoint solicitado');
       
@@ -171,7 +246,7 @@ module.exports = async (req, res) => {
         success: true,
         message: "Debug endpoint funcionando",
         method: "json_as_text_plain",
-        phase: "Fase 1 - Module Aliases (Config + Logger)",
+        phase: "Fase 1 - Module Aliases (Config + Logger + Database)",
         moduleStatus: {
           aliases: moduleAliasConfigured,
           config: compiledModules.config !== null,
@@ -180,6 +255,7 @@ module.exports = async (req, res) => {
           app: compiledModules.app !== null
         },
         loadedModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null),
+        database: databaseStatus,
         environment: {
           NODE_ENV: process.env.NODE_ENV,
           ENABLE_SWAGGER: process.env.ENABLE_SWAGGER,
@@ -214,29 +290,32 @@ module.exports = async (req, res) => {
         message: "Documentación de Imaginarium API",
         note: "Swagger temporalmente deshabilitado, usando respuestas JSON como text/plain",
         version: "1.0.0",
-        phase: "Fase 1 - Module Aliases integrados (Config + Logger)",
+        phase: "Fase 1 - Module Aliases integrados (Config + Logger + Database)",
         moduleAliases: moduleAliasConfigured,
         compiledModulesActive: Object.keys(compiledModules).filter(key => compiledModules[key] !== null),
+        databaseStatus: databaseStatus,
         endpoints: {
           health: {
             method: "GET",
             path: "/health",
-            description: "Health check del sistema"
+            description: "Health check del sistema con estado de base de datos"
           },
           debug: {
             method: "GET", 
             path: "/debug",
-            description: "Información de debug del sistema y estado de módulos"
+            description: "Información de debug del sistema, módulos y base de datos"
           },
           users: {
             method: "GET",
             path: "/api/users",
-            description: "Lista de usuarios (requiere autenticación)"
+            description: "Lista de usuarios (requiere autenticación)",
+            status: databaseStatus.connected ? "Conectado a DB real" : "Modo offline con datos mock"
           },
           conversations: {
             method: "GET",
             path: "/api/conversations", 
-            description: "Lista de conversaciones (requiere autenticación)"
+            description: "Lista de conversaciones (requiere autenticación)",
+            status: databaseStatus.connected ? "Conectado a DB real" : "Modo offline con datos mock"
           }
         },
         timestamp: new Date().toISOString()
@@ -246,20 +325,26 @@ module.exports = async (req, res) => {
       logger.info('API docs enviado exitosamente');
     });
     
-    // API/USERS ENDPOINT
+    // API/USERS ENDPOINT (mejorado con database awareness)
     app.get('/api/users', (req, res) => {
       logger.info('Users endpoint solicitado');
       
       const usersData = {
         success: true,
-        message: "Endpoint de usuarios funcionando",
-        note: "Base de datos temporalmente deshabilitada para testing",
-        phase: "Fase 1 - Con module aliases (Config + Logger)",
-        data: [],
+        message: databaseStatus.connected ? 
+          "Endpoint de usuarios funcionando con base de datos" : 
+          "Endpoint de usuarios en modo offline",
+        database: databaseStatus,
+        note: databaseStatus.connected ? 
+          "Conectado a MongoDB - datos reales disponibles" : 
+          "Base de datos desconectada - usando datos mock",
+        phase: "Fase 1 - Con module aliases (Config + Logger + Database)",
+        data: [], // TODO: cargar datos reales si database está conectada
         meta: {
           total: 0,
           page: 1,
-          limit: 10
+          limit: 10,
+          source: databaseStatus.connected ? "database" : "mock"
         },
         timestamp: new Date().toISOString()
       };
@@ -268,20 +353,26 @@ module.exports = async (req, res) => {
       logger.info('Users endpoint enviado exitosamente');
     });
     
-    // API/CONVERSATIONS ENDPOINT  
+    // API/CONVERSATIONS ENDPOINT (mejorado con database awareness)
     app.get('/api/conversations', (req, res) => {
       logger.info('Conversations endpoint solicitado');
       
       const conversationsData = {
         success: true,
-        message: "Endpoint de conversaciones funcionando", 
-        note: "Base de datos temporalmente deshabilitada para testing",
-        phase: "Fase 1 - Con module aliases (Config + Logger)",
-        data: [],
+        message: databaseStatus.connected ? 
+          "Endpoint de conversaciones funcionando con base de datos" : 
+          "Endpoint de conversaciones en modo offline",
+        database: databaseStatus,
+        note: databaseStatus.connected ? 
+          "Conectado a MongoDB - datos reales disponibles" : 
+          "Base de datos desconectada - usando datos mock",
+        phase: "Fase 1 - Con module aliases (Config + Logger + Database)",
+        data: [], // TODO: cargar datos reales si database está conectada
         meta: {
           total: 0,
           page: 1,
-          limit: 10
+          limit: 10,
+          source: databaseStatus.connected ? "database" : "mock"
         },
         timestamp: new Date().toISOString()
       };
@@ -298,13 +389,14 @@ module.exports = async (req, res) => {
         success: true,
         message: "🎉 Imaginarium API - Sistema de Conversaciones con IA",
         version: "1.0.0",
-        phase: "Fase 1 - Module Aliases Integrados (Config + Logger)",
+        phase: "Fase 1 - Module Aliases Integrados (Config + Logger + Database)",
         status: "Funcionando correctamente con JSON como text/plain",
         environment: config.nodeEnv,
         moduleStatus: {
           aliases: moduleAliasConfigured,
           compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null)
         },
+        database: databaseStatus,
         endpoints: {
           health: "/health",
           docs: "/api-docs", 
@@ -313,7 +405,9 @@ module.exports = async (req, res) => {
           users: "/api/users",
           conversations: "/api/conversations"
         },
-        note: "API funcionando con module aliases y módulos compilados. Próximo: base de datos.",
+        note: databaseStatus.connected ? 
+          "API funcionando con base de datos conectada. ¡Listo para datos reales!" :
+          "API funcionando en modo offline. Base de datos por configurar.",
         timestamp: new Date().toISOString()
       };
       
@@ -327,7 +421,7 @@ module.exports = async (req, res) => {
       
       const apiData = {
         success: true,
-        message: "Imaginarium API v1.0.0 - Fase 1 (Config + Logger)",
+        message: "Imaginarium API v1.0.0 - Fase 1 (Config + Logger + Database)",
         documentation: "/api-docs",
         endpoints: {
           users: "/api/users",
@@ -335,7 +429,8 @@ module.exports = async (req, res) => {
         },
         note: "Todas las respuestas en formato JSON válido con Content-Type text/plain",
         moduleAliases: moduleAliasConfigured,
-        compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null)
+        compiledModules: Object.keys(compiledModules).filter(key => compiledModules[key] !== null),
+        database: databaseStatus
       };
       
       sendJSON(res, apiData);
@@ -366,8 +461,11 @@ module.exports = async (req, res) => {
       sendJSON(res, notFoundData, 404);
     });
     
-    console.log("✅ Express app configurada completamente - Fase 1 (Config + Logger)");
-    logger.info('Express app configurada completamente', { phase: 'Fase 1 - Config + Logger' });
+    console.log("✅ Express app configurada completamente - Fase 1 (Config + Logger + Database)");
+    logger.info('Express app configurada completamente', { 
+      phase: 'Fase 1 - Config + Logger + Database',
+      databaseStatus: databaseStatus 
+    });
     console.log("🚀 Delegando request a Express...");
     
     return app(req, res);
@@ -381,7 +479,7 @@ module.exports = async (req, res) => {
       success: false,
       message: "Error crítico del servidor",
       error: error.message,
-      phase: "Fase 1 - Module Aliases (Config + Logger)",
+      phase: "Fase 1 - Module Aliases (Config + Logger + Database)",
       timestamp: new Date().toISOString()
     };
     
