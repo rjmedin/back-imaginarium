@@ -34,7 +34,7 @@ ENABLE_SWAGGER=true
 
 # Variables para n8n
 N8N_URL=https://tu-instancia-n8n.com
-N8N_WEBHOOK_URL=https://imaginarium-hack-3d.vercel.app/api/v1/webhooks
+N8N_WEBHOOK_URL=https://back-imaginarium.vercel.app/health/api/v1/webhooks
 
 # CORS para tu frontend
 FRONTEND_URL=https://tu-frontend.vercel.app
@@ -78,29 +78,29 @@ vercel
 
 1. **Health Check**
    ```bash
-   curl https://imaginarium-hack-3d.vercel.app/health
+   curl https://back-imaginarium.vercel.app/health/health
    ```
 
 2. **API Info**
    ```bash
-   curl https://imaginarium-hack-3d.vercel.app/api
+   curl https://back-imaginarium.vercel.app/health/api
    ```
 
 3. **Swagger Documentation**
    ```
-   https://imaginarium-hack-3d.vercel.app/api-docs
+   https://back-imaginarium.vercel.app/health/api-docs
    ```
 
 4. **Registrar Usuario**
    ```bash
-   curl -X POST https://imaginarium-hack-3d.vercel.app/api/v1/users/register \
+   curl -X POST https://back-imaginarium.vercel.app/health/api/v1/users/register \
      -H "Content-Type: application/json" \
      -d '{"name":"Test User","email":"test@ejemplo.com","password":"123456"}'
    ```
 
 5. **n8n Endpoint Test**
    ```bash
-   curl -X POST https://imaginarium-hack-3d.vercel.app/api/v1/webhooks/test \
+   curl -X POST https://back-imaginarium.vercel.app/health/api/v1/webhooks/test \
      -H "Authorization: Bearer TU_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{}'
@@ -134,11 +134,11 @@ CORS_ORIGINS=https://tu-frontend.vercel.app,https://app.n8n.cloud,https://tu-dom
 
 ### **2. URLs de Producción para n8n:**
 ```
-Base URL: https://imaginarium-hack-3d.vercel.app
-Health: https://imaginarium-hack-3d.vercel.app/health
-Crear Conversación: POST https://imaginarium-hack-3d.vercel.app/api/v1/n8n/conversations/create
-Enviar Mensaje: POST https://imaginarium-hack-3d.vercel.app/api/v1/n8n/messages/send
-Webhook Test: POST https://imaginarium-hack-3d.vercel.app/api/v1/webhooks/test
+Base URL: https://back-imaginarium.vercel.app/health
+Health: https://back-imaginarium.vercel.app/health/health
+Crear Conversación: POST https://back-imaginarium.vercel.app/health/api/v1/n8n/conversations/create
+Enviar Mensaje: POST https://back-imaginarium.vercel.app/health/api/v1/n8n/messages/send
+Webhook Test: POST https://back-imaginarium.vercel.app/health/api/v1/webhooks/test
 ```
 
 ##  **Monitoreo y Logs**
