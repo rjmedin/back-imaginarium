@@ -41,6 +41,8 @@ if (moduleAliasConfigured) {
 
 // PASO 3: Conexión directa a MongoDB (sin módulos compilados)
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 // Estado global de conexión más robusto
 let mongoConnection = {
@@ -243,6 +245,65 @@ function getLogger() {
   };
 }
 
+// FUNCIONES DE AUTENTICACIÓN
+async function hashPassword(password) {
+  const saltRounds = 12;
+  return await bcrypt.hash(password, saltRounds);
+}
+
+async function comparePassword(password, hashedPassword) {
+  return await bcrypt.compare(password, hashedPassword);
+}
+
+function generateJWT(user) {
+  const config = getConfig();
+  const payload = {
+    userId: user._id,
+    email: user.email,
+    name: user.name,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 horas
+  };
+  
+  return jwt.sign(payload, config.jwtSecret || 'imaginarium_secret_key_2024');
+}
+
+function verifyJWT(token) {
+  try {
+    const config = getConfig();
+    return jwt.verify(token, config.jwtSecret || 'imaginarium_secret_key_2024');
+  } catch (error) {
+    return null;
+  }
+}
+
+// Middleware de autenticación
+function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return sendJSON(res, {
+      success: false,
+      message: "Token de autorización requerido",
+      error: "Missing or invalid Authorization header"
+    }, 401);
+  }
+  
+  const token = authHeader.substring(7); // Remover "Bearer "
+  const decoded = verifyJWT(token);
+  
+  if (!decoded) {
+    return sendJSON(res, {
+      success: false,
+      message: "Token inválido o expirado",
+      error: "Invalid JWT token"
+    }, 401);
+  }
+  
+  req.user = decoded;
+  next();
+}
+
 // Función para ejecutar operaciones de MongoDB con timeout y fallback
 async function safeMongoOperation(operation, fallbackData, operationName) {
   // Verificar conexión primero
@@ -375,7 +436,7 @@ module.exports = async (req, res) => {
         success: true,
         message: "Debug endpoint funcionando",
         method: "json_as_text_plain",
-        phase: "Fase 2 - MongoDB Robusto + Manejo de Errores",
+        phase: "Fase 2 - MongoDB Robusto + Autenticación JWT",
         moduleStatus: {
           aliases: moduleAliasConfigured,
           config: compiledModules.config !== null,
@@ -565,10 +626,15 @@ module.exports = async (req, res) => {
     app.get('/api', (req, res) => {
       const apiData = {
         success: true,
-        message: "Imaginarium API v1.0.0 - Fase 2 (MongoDB Robusto)",
+        message: "Imaginarium API v1.0.0 - Fase 2 (MongoDB Robusto + Auth)",
         endpoints: {
           users: "/api/users",
-          conversations: "/api/conversations"
+          conversations: "/api/conversations",
+          auth: {
+            register: "POST /api/auth/register",
+            login: "POST /api/auth/login",
+            profile: "GET /api/auth/profile (protected)"
+          }
         },
         database: mongoConnection,
         dataSource: mongoConnection.connected ? "MongoDB Real" : "Mock Data",
@@ -579,6 +645,238 @@ module.exports = async (req, res) => {
       sendJSON(res, apiData);
     });
     
+    // ENDPOINTS DE AUTENTICACIÓN
+    
+    // POST /api/auth/register - Registro de usuario
+    app.post('/api/auth/register', async (req, res) => {
+      logger.info('Register endpoint solicitado');
+      
+      try {
+        const { name, email, password } = req.body;
+        
+        // Validaciones básicas
+        if (!name || !email || !password) {
+          return sendJSON(res, {
+            success: false,
+            message: "Faltan campos requeridos",
+            required: ["name", "email", "password"],
+            received: { name: !!name, email: !!email, password: !!password }
+          }, 400);
+        }
+        
+        if (password.length < 6) {
+          return sendJSON(res, {
+            success: false,
+            message: "La contraseña debe tener al menos 6 caracteres"
+          }, 400);
+        }
+        
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de registro temporalmente no disponible",
+            database: mongoConnection,
+            note: "MongoDB no está conectado"
+          }, 503);
+        }
+        
+        // Verificar si el usuario ya existe
+        const existingUser = await User.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+          return sendJSON(res, {
+            success: false,
+            message: "El email ya está registrado",
+            email: email.toLowerCase()
+          }, 409);
+        }
+        
+        // Crear nuevo usuario
+        const hashedPassword = await hashPassword(password);
+        const newUser = new User({
+          name: name.trim(),
+          email: email.toLowerCase().trim(),
+          password: hashedPassword,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        const savedUser = await newUser.save();
+        
+        // Generar JWT token
+        const token = generateJWT(savedUser);
+        
+        const registerData = {
+          success: true,
+          message: "Usuario registrado exitosamente",
+          user: {
+            id: savedUser._id,
+            name: savedUser.name,
+            email: savedUser.email,
+            createdAt: savedUser.createdAt
+          },
+          token: token,
+          expiresIn: "24h",
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, registerData, 201);
+        logger.info('Usuario registrado exitosamente', { email: savedUser.email });
+        
+      } catch (error) {
+        logger.error('Error en register endpoint', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error interno del servidor durante el registro",
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
+    });
+    
+    // POST /api/auth/login - Login de usuario
+    app.post('/api/auth/login', async (req, res) => {
+      logger.info('Login endpoint solicitado');
+      
+      try {
+        const { email, password } = req.body;
+        
+        // Validaciones básicas
+        if (!email || !password) {
+          return sendJSON(res, {
+            success: false,
+            message: "Email y contraseña son requeridos",
+            received: { email: !!email, password: !!password }
+          }, 400);
+        }
+        
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de autenticación temporalmente no disponible",
+            database: mongoConnection,
+            note: "MongoDB no está conectado"
+          }, 503);
+        }
+        
+        // Buscar usuario por email
+        const user = await User.findOne({ email: email.toLowerCase() });
+        if (!user) {
+          return sendJSON(res, {
+            success: false,
+            message: "Credenciales inválidas",
+            note: "Usuario no encontrado"
+          }, 401);
+        }
+        
+        // Verificar contraseña
+        const isValidPassword = await comparePassword(password, user.password);
+        if (!isValidPassword) {
+          return sendJSON(res, {
+            success: false,
+            message: "Credenciales inválidas",
+            note: "Contraseña incorrecta"
+          }, 401);
+        }
+        
+        // Generar JWT token
+        const token = generateJWT(user);
+        
+        const loginData = {
+          success: true,
+          message: "Login exitoso",
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt
+          },
+          token: token,
+          expiresIn: "24h",
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, loginData);
+        logger.info('Login exitoso', { email: user.email });
+        
+      } catch (error) {
+        logger.error('Error en login endpoint', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error interno del servidor durante el login",
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
+    });
+    
+    // GET /api/auth/profile - Perfil de usuario (protegido)
+    app.get('/api/auth/profile', authMiddleware, async (req, res) => {
+      logger.info('Profile endpoint solicitado', { userId: req.user.userId });
+      
+      try {
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de perfil temporalmente no disponible",
+            database: mongoConnection
+          }, 503);
+        }
+        
+        // Obtener datos actualizados del usuario
+        const user = await User.findById(req.user.userId).select('-password');
+        if (!user) {
+          return sendJSON(res, {
+            success: false,
+            message: "Usuario no encontrado"
+          }, 404);
+        }
+        
+        const profileData = {
+          success: true,
+          message: "Perfil de usuario obtenido exitosamente",
+          user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+          },
+          token: {
+            issuedAt: new Date(req.user.iat * 1000),
+            expiresAt: new Date(req.user.exp * 1000)
+          },
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, profileData);
+        logger.info('Profile enviado exitosamente', { userId: user._id });
+        
+      } catch (error) {
+        logger.error('Error en profile endpoint', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error interno del servidor obteniendo perfil",
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
+    });
+    
     // CATCH ALL - 404
     app.use('*', (req, res) => {
       const notFoundData = {
@@ -586,7 +884,17 @@ module.exports = async (req, res) => {
         message: "Endpoint no encontrado",
         path: req.url,
         method: req.method,
-        availableEndpoints: ["/", "/health", "/debug", "/api/users", "/api/conversations"],
+        availableEndpoints: [
+          "/",
+          "/health", 
+          "/debug",
+          "/api",
+          "/api/users",
+          "/api/conversations",
+          "POST /api/auth/register",
+          "POST /api/auth/login", 
+          "GET /api/auth/profile (protected)"
+        ],
         timestamp: new Date().toISOString()
       };
       
