@@ -479,112 +479,362 @@ module.exports = async (req, res) => {
       logger.info('Debug enviado exitosamente');
     });
     
-    // API/USERS ENDPOINT - CON MANEJO ROBUSTO
-    app.get('/api/users', async (req, res) => {
-      logger.info('Users endpoint solicitado');
+    // API/USERS ENDPOINT - PROTEGIDO (SOLO PERFIL PROPIO)
+    app.get('/api/users', authMiddleware, async (req, res) => {
+      logger.info('Users endpoint solicitado (protegido)', { userId: req.user.userId });
       
-      // Datos mock como fallback
-      const mockUsers = [
-        {
-          _id: "mock1",
-          email: "usuario1@example.com",
-          name: "Usuario Demo 1",
-          createdAt: new Date().toISOString()
-        },
-        {
-          _id: "mock2", 
-          email: "usuario2@example.com",
-          name: "Usuario Demo 2",
-          createdAt: new Date().toISOString()
+      try {
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de usuarios temporalmente no disponible",
+            database: mongoConnection
+          }, 503);
         }
-      ];
-      
-      // Intentar operación MongoDB con fallback inteligente
-      const result = await safeMongoOperation(
-        async () => {
-          const users = await User.find({}).select('-password').limit(10);
-          const total = await User.countDocuments();
-          return { users, total };
-        },
-        { users: mockUsers, total: mockUsers.length },
-        'users.find'
-      );
-      
-      const usersData = {
-        success: true,
-        message: result.source === 'mongodb' ? 
-          "Usuarios cargados desde MongoDB" : 
-          "Usuarios mock (MongoDB no operativo)",
-        database: mongoConnection,
-        phase: "Fase 2 - MongoDB Robusto",
-        data: result.data.users,
-        meta: {
-          total: result.data.total,
-          page: 1,
-          limit: 10,
-          source: result.source,
-          reason: result.reason
-        },
-        troubleshooting: result.errorAnalysis || null,
-        timestamp: new Date().toISOString()
-      };
-      
-      sendJSON(res, usersData);
-      logger.info('Users enviados exitosamente', { source: result.source, count: result.data.users.length });
+        
+        // Obtener solo el perfil del usuario logueado
+        const user = await User.findById(req.user.userId).select('-password');
+        if (!user) {
+          return sendJSON(res, {
+            success: false,
+            message: "Usuario no encontrado"
+          }, 404);
+        }
+        
+        const usersData = {
+          success: true,
+          message: "Perfil de usuario obtenido exitosamente",
+          database: mongoConnection,
+          phase: "Fase 3 - Endpoints Protegidos",
+          data: [user], // Array para mantener compatibilidad
+          meta: {
+            total: 1,
+            page: 1,
+            limit: 10,
+            source: "mongodb",
+            reason: "User profile retrieved",
+            protected: true,
+            userId: req.user.userId
+          },
+          note: "Endpoint protegido - solo muestra el perfil del usuario autenticado",
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, usersData);
+        logger.info('User profile enviado exitosamente', { userId: user._id });
+        
+      } catch (error) {
+        logger.error('Error en users endpoint protegido', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error al obtener perfil de usuario",
+          error: error.message,
+          database: mongoConnection,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
     });
     
-    // API/CONVERSATIONS ENDPOINT - CON MANEJO ROBUSTO
-    app.get('/api/conversations', async (req, res) => {
-      logger.info('Conversations endpoint solicitado');
+    // API/USERS/ALL ENDPOINT - ADMIN ONLY (FUTURO)
+    app.get('/api/users/all', authMiddleware, async (req, res) => {
+      logger.info('Users/all endpoint solicitado (admin)', { userId: req.user.userId });
       
-      // Datos mock como fallback
-      const mockConversations = [
-        {
-          _id: "conv1",
-          title: "Conversación Demo 1",
-          userId: { name: "Usuario Demo", email: "demo@example.com" },
-          messages: [
-            { role: "user", content: "Hola", timestamp: new Date().toISOString() },
-            { role: "assistant", content: "¡Hola! ¿En qué puedo ayudarte?", timestamp: new Date().toISOString() }
-          ],
-          createdAt: new Date().toISOString()
-        }
-      ];
-      
-      // Intentar operación MongoDB con fallback inteligente
-      const result = await safeMongoOperation(
-        async () => {
-          const conversations = await Conversation.find({})
-            .populate('userId', 'name email')
-            .limit(10);
-          const total = await Conversation.countDocuments();
-          return { conversations, total };
-        },
-        { conversations: mockConversations, total: mockConversations.length },
-        'conversations.find'
-      );
-      
-      const conversationsData = {
-        success: true,
-        message: result.source === 'mongodb' ? 
-          "Conversaciones cargadas desde MongoDB" : 
-          "Conversaciones mock (MongoDB no operativo)",
-        database: mongoConnection,
-        phase: "Fase 2 - MongoDB Robusto",
-        data: result.data.conversations,
-        meta: {
-          total: result.data.total,
-          page: 1,
-          limit: 10,
-          source: result.source,
-          reason: result.reason
-        },
-        troubleshooting: result.errorAnalysis || null,
+      // Por ahora, solo devolver información de que necesita ser admin
+      sendJSON(res, {
+        success: false,
+        message: "Funcionalidad de administrador no implementada",
+        note: "Este endpoint estará disponible para usuarios admin en el futuro",
+        requiredRole: "admin",
+        currentUser: req.user.email,
         timestamp: new Date().toISOString()
-      };
+      }, 403);
+    });
+    
+    // API/CONVERSATIONS ENDPOINT - PROTEGIDO (SOLO DEL USUARIO)
+    app.get('/api/conversations', authMiddleware, async (req, res) => {
+      logger.info('Conversations endpoint solicitado (protegido)', { userId: req.user.userId });
       
-      sendJSON(res, conversationsData);
-      logger.info('Conversations enviadas exitosamente', { source: result.source, count: result.data.conversations.length });
+      try {
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de conversaciones temporalmente no disponible",
+            database: mongoConnection
+          }, 503);
+        }
+        
+        // Obtener solo las conversaciones del usuario logueado
+        const conversations = await Conversation.find({ userId: req.user.userId })
+          .populate('userId', 'name email')
+          .sort({ updatedAt: -1 }) // Más recientes primero
+          .limit(10);
+          
+        const total = await Conversation.countDocuments({ userId: req.user.userId });
+        
+        const conversationsData = {
+          success: true,
+          message: "Conversaciones del usuario cargadas desde MongoDB",
+          database: mongoConnection,
+          phase: "Fase 3 - Endpoints Protegidos",
+          data: conversations,
+          meta: {
+            total: total,
+            page: 1,
+            limit: 10,
+            source: "mongodb",
+            reason: "User conversations retrieved",
+            protected: true,
+            userId: req.user.userId,
+            userEmail: req.user.email
+          },
+          note: "Endpoint protegido - solo muestra conversaciones del usuario autenticado",
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, conversationsData);
+        logger.info('User conversations enviadas exitosamente', { 
+          userId: req.user.userId, 
+          count: conversations.length, 
+          total: total 
+        });
+        
+      } catch (error) {
+        logger.error('Error en conversations endpoint protegido', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error al obtener conversaciones del usuario",
+          error: error.message,
+          database: mongoConnection,
+          userId: req.user.userId,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
+    });
+    
+    // POST /api/conversations - CREAR NUEVA CONVERSACIÓN
+    app.post('/api/conversations', authMiddleware, async (req, res) => {
+      logger.info('Create conversation endpoint solicitado', { userId: req.user.userId });
+      
+      try {
+        const { title } = req.body;
+        
+        // Validaciones básicas
+        if (!title || title.trim().length === 0) {
+          return sendJSON(res, {
+            success: false,
+            message: "El título de la conversación es requerido",
+            received: { title: !!title }
+          }, 400);
+        }
+        
+        if (title.trim().length > 100) {
+          return sendJSON(res, {
+            success: false,
+            message: "El título no puede exceder 100 caracteres",
+            received: { titleLength: title.length, maxLength: 100 }
+          }, 400);
+        }
+        
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de conversaciones temporalmente no disponible",
+            database: mongoConnection
+          }, 503);
+        }
+        
+        // Crear nueva conversación
+        const newConversation = new Conversation({
+          userId: req.user.userId,
+          title: title.trim(),
+          messages: [],
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        
+        const savedConversation = await newConversation.save();
+        
+        // Poblar userId para la respuesta
+        await savedConversation.populate('userId', 'name email');
+        
+        const conversationData = {
+          success: true,
+          message: "Conversación creada exitosamente",
+          data: savedConversation,
+          meta: {
+            userId: req.user.userId,
+            userEmail: req.user.email,
+            messagesCount: 0,
+            protected: true
+          },
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, conversationData, 201);
+        logger.info('Conversación creada exitosamente', { 
+          conversationId: savedConversation._id,
+          userId: req.user.userId,
+          title: title.trim()
+        });
+        
+      } catch (error) {
+        logger.error('Error creando conversación', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error interno del servidor creando conversación",
+          error: error.message,
+          userId: req.user.userId,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
+    });
+    
+    // POST /api/conversations/:id/messages - AGREGAR MENSAJE
+    app.post('/api/conversations/:id/messages', authMiddleware, async (req, res) => {
+      logger.info('Add message endpoint solicitado', { 
+        userId: req.user.userId, 
+        conversationId: req.params.id 
+      });
+      
+      try {
+        const { role, content } = req.body;
+        const conversationId = req.params.id;
+        
+        // Validaciones básicas
+        if (!role || !content) {
+          return sendJSON(res, {
+            success: false,
+            message: "Role y content son requeridos",
+            received: { role: !!role, content: !!content },
+            validRoles: ["user", "assistant"]
+          }, 400);
+        }
+        
+        if (!["user", "assistant"].includes(role)) {
+          return sendJSON(res, {
+            success: false,
+            message: "Role debe ser 'user' o 'assistant'",
+            received: role,
+            validRoles: ["user", "assistant"]
+          }, 400);
+        }
+        
+        if (content.trim().length === 0) {
+          return sendJSON(res, {
+            success: false,
+            message: "El contenido del mensaje no puede estar vacío"
+          }, 400);
+        }
+        
+        if (content.trim().length > 2000) {
+          return sendJSON(res, {
+            success: false,
+            message: "El contenido del mensaje no puede exceder 2000 caracteres",
+            received: { contentLength: content.length, maxLength: 2000 }
+          }, 400);
+        }
+        
+        // Verificar si MongoDB está disponible
+        const isConnected = await testMongoConnection();
+        if (!isConnected) {
+          return sendJSON(res, {
+            success: false,
+            message: "Servicio de mensajes temporalmente no disponible",
+            database: mongoConnection
+          }, 503);
+        }
+        
+        // Verificar que la conversación existe y pertenece al usuario
+        const conversation = await Conversation.findOne({ 
+          _id: conversationId, 
+          userId: req.user.userId 
+        });
+        
+        if (!conversation) {
+          return sendJSON(res, {
+            success: false,
+            message: "Conversación no encontrada o no pertenece al usuario",
+            conversationId: conversationId,
+            userId: req.user.userId
+          }, 404);
+        }
+        
+        // Crear nuevo mensaje
+        const newMessage = {
+          role: role,
+          content: content.trim(),
+          timestamp: new Date()
+        };
+        
+        // Agregar mensaje a la conversación
+        conversation.messages.push(newMessage);
+        conversation.updatedAt = new Date();
+        
+        const savedConversation = await conversation.save();
+        
+        // Obtener el mensaje recién creado
+        const addedMessage = savedConversation.messages[savedConversation.messages.length - 1];
+        
+        const messageData = {
+          success: true,
+          message: "Mensaje agregado exitosamente",
+          data: {
+            message: addedMessage,
+            conversation: {
+              id: savedConversation._id,
+              title: savedConversation.title,
+              messagesCount: savedConversation.messages.length,
+              updatedAt: savedConversation.updatedAt
+            }
+          },
+          meta: {
+            userId: req.user.userId,
+            userEmail: req.user.email,
+            conversationId: conversationId,
+            messageId: addedMessage._id,
+            protected: true
+          },
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, messageData, 201);
+        logger.info('Mensaje agregado exitosamente', { 
+          conversationId: conversationId,
+          messageId: addedMessage._id,
+          userId: req.user.userId,
+          role: role,
+          contentLength: content.trim().length
+        });
+        
+      } catch (error) {
+        logger.error('Error agregando mensaje', error);
+        
+        const errorData = {
+          success: false,
+          message: "Error interno del servidor agregando mensaje",
+          error: error.message,
+          userId: req.user.userId,
+          conversationId: req.params.id,
+          timestamp: new Date().toISOString()
+        };
+        
+        sendJSON(res, errorData, 500);
+      }
     });
     
     // PÁGINA PRINCIPAL
@@ -595,17 +845,20 @@ module.exports = async (req, res) => {
         success: true,
         message: "🎉 Imaginarium API - Sistema de Conversaciones con IA",
         version: "1.0.0",
-        phase: "Fase 2 - MongoDB Robusto + Manejo de Errores",
+        phase: "Fase 3 - Endpoints Protegidos con Autenticación JWT",
         status: mongoConnection.connected ? 
-          "Funcionando con datos reales de MongoDB" : 
-          "Funcionando en modo offline con datos mock",
+          "Funcionando con datos reales de MongoDB + Endpoints protegidos" : 
+          "Funcionando en modo offline con datos mock + Endpoints protegidos",
         environment: config.nodeEnv,
         database: mongoConnection,
         endpoints: {
-          health: "/health",
-          debug: "/debug",
-          users: "/api/users - " + (mongoConnection.connected ? "DATOS REALES" : "datos mock"),
-          conversations: "/api/conversations - " + (mongoConnection.connected ? "DATOS REALES" : "datos mock")
+          health: "/health - System status",
+          debug: "/debug - Debug information",
+          auth: "/api/auth/* - Authentication (register, login, profile)",
+          users: "/api/users - Own profile (protected) - " + (mongoConnection.connected ? "DATOS REALES" : "datos mock"),
+          conversations: "/api/conversations - Own conversations (protected) - " + (mongoConnection.connected ? "DATOS REALES" : "datos mock"),
+          createConversation: "POST /api/conversations - Create new conversation (protected)",
+          addMessage: "POST /api/conversations/:id/messages - Add message (protected)"
         },
         mongoAtlasHelp: mongoConnection.ipWhitelistIssue ? {
           problem: "🚨 Detectado problema de IP Whitelist en MongoDB Atlas",
@@ -613,8 +866,13 @@ module.exports = async (req, res) => {
           documentation: "https://www.mongodb.com/docs/atlas/security-whitelist/"
         } : null,
         note: mongoConnection.connected ? 
-          "🚀 ¡API completamente funcional con base de datos real!" :
-          "⚠️ API funcionando en modo offline. " + (mongoConnection.ipWhitelistIssue ? "Configurar IP whitelist en Atlas." : "Verificar configuración de MongoDB."),
+          "🚀 ¡API completamente funcional con base de datos real y endpoints protegidos!" :
+          "⚠️ API funcionando en modo offline con endpoints protegidos. " + (mongoConnection.ipWhitelistIssue ? "Configurar IP whitelist en Atlas." : "Verificar configuración de MongoDB."),
+        security: {
+          message: "🔐 Endpoints protegidos requieren autenticación JWT",
+          howToAuth: "1) POST /api/auth/login para obtener token, 2) Usar Authorization: Bearer {token}",
+          tokenExpiry: "24 horas"
+        },
         timestamp: new Date().toISOString()
       };
       
@@ -626,10 +884,13 @@ module.exports = async (req, res) => {
     app.get('/api', (req, res) => {
       const apiData = {
         success: true,
-        message: "Imaginarium API v1.0.0 - Fase 2 (MongoDB Robusto + Auth)",
+        message: "Imaginarium API v1.0.0 - Fase 3 (Endpoints Protegidos)",
         endpoints: {
-          users: "/api/users",
-          conversations: "/api/conversations",
+          users: "GET /api/users (protected - own profile)",
+          usersAll: "GET /api/users/all (admin only - future)",
+          conversations: "GET /api/conversations (protected - own conversations)",
+          createConversation: "POST /api/conversations (protected)",
+          addMessage: "POST /api/conversations/:id/messages (protected)",
           auth: {
             register: "POST /api/auth/register",
             login: "POST /api/auth/login",
@@ -889,8 +1150,11 @@ module.exports = async (req, res) => {
           "/health", 
           "/debug",
           "/api",
-          "/api/users",
-          "/api/conversations",
+          "GET /api/users (protected)",
+          "GET /api/users/all (admin only)",
+          "GET /api/conversations (protected)",
+          "POST /api/conversations (protected)",
+          "POST /api/conversations/:id/messages (protected)",
           "POST /api/auth/register",
           "POST /api/auth/login", 
           "GET /api/auth/profile (protected)"
